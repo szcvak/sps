@@ -28,7 +28,7 @@ func NewClientWrapper(conn net.Conn) *ClientWrapper {
 
 	return &ClientWrapper{
 		conn:   conn,
-		Player: NewPlayer("Brawler"),
+		Player: NewPlayer(),
 
 		encryptor: encryptor,
 		decryptor: decryptor,

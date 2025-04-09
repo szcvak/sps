@@ -1,7 +1,13 @@
 package messages
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"github.com/szcvak/sps/pkg/core"
+	"github.com/szcvak/sps/pkg/database"
+	"github.com/szcvak/sps/pkg/messaging"
+	"os"
 )
 
 type LoginMessage struct {
@@ -58,17 +64,52 @@ func (l *LoginMessage) Unmarshal(payload []byte) {
 	l.unmarshalled = true
 }
 
-func (l *LoginMessage) Process(wrapper *core.ClientWrapper) {
+func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
 	if !l.Unmarshalled() {
 		return
 	}
 
-	wrapper.Player.Token = l.Token
+	player, err := dbm.LoadPlayerByToken(context.Background(), l.Token)
 
-	wrapper.Player.HighId = l.HighId
-	wrapper.Player.LowId = l.LowId
+	if err != nil {
+		if errors.Is(err, database.ErrPlayerNotFound) {
+			err = dbm.CreatePlayer(context.Background(), l.HighId, l.LowId, "Undefined", l.Token, l.Region)
 
-	wrapper.Player.LoggedIn = true
+			if err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "error creating player: %v\n", err)
+
+				failMsg := NewLoginFailedMessage(l, "The server is currently experiencing some issues. Sorry!", messaging.LoginFailed)
+				wrapper.Send(failMsg.PacketId(), failMsg.PacketVersion(), failMsg.Marshal())
+
+				return
+			}
+
+			failMsg := NewLoginFailedMessage(l, "Your account has been created. Please reload the game.", messaging.LoginFailed)
+			wrapper.Send(failMsg.PacketId(), failMsg.PacketVersion(), failMsg.Marshal())
+
+			return
+		} else {
+			_, _ = fmt.Fprintf(os.Stderr, "error querying player by token %s: %v\n", l.Token, err)
+
+			failMsg := NewLoginFailedMessage(l, "The server is currently experiencing some issues. Sorry!", messaging.LoginFailed)
+			wrapper.Send(failMsg.PacketId(), failMsg.PacketVersion(), failMsg.Marshal())
+
+			return
+		}
+	}
+
+	stmt := `update players set last_login = current_timestamp where id = $1`
+
+	_, err = dbm.Pool().Exec(context.Background(), stmt, player.DbId)
+
+	if err != nil {
+		fmt.Printf("(non-halting) failed to update last_login for player %d: %v\n", player.DbId, err)
+	} else {
+		fmt.Printf("updated last_login for %s (%d)\n", player.Name, player.DbId)
+	}
+
+	player.LoggedIn = true
+	wrapper.Player = player
 
 	msg := NewLoginOkMessage(l)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())

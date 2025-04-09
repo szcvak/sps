@@ -3,22 +3,25 @@ package network
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/szcvak/sps/pkg/core"
+	"github.com/szcvak/sps/pkg/database"
 	"io"
 	"net"
-
-	"github.com/szcvak/sps/pkg/core"
 )
 
 type Server struct {
 	address string
 	ln      net.Listener
 	quitch  chan struct{}
+
+	dbm *database.Manager
 }
 
-func NewServer(address string) *Server {
+func NewServer(address string, dbm *database.Manager) *Server {
 	return &Server{
 		address: address,
 		quitch:  make(chan struct{}),
+		dbm:     dbm,
 	}
 }
 
@@ -103,6 +106,6 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 
 		msg := factory()
 		msg.Unmarshal(payload)
-		msg.Process(wrapper)
+		msg.Process(wrapper, s.dbm)
 	}
 }
