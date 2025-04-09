@@ -48,6 +48,9 @@ const (
 	selected_gear1 int default null,
 	selected_gear2 int default null,
 	
+	unlocked_skins jsonb not null default '[]'::jsonb,
+	selected_skin int not null default 0,
+	
 	unlocked_at timestamptz not null default current_timestamp,
 	
 	primary key (player_id, brawler_id)
@@ -116,8 +119,11 @@ var (
 // --- Other --- //
 
 var (
-	defaultCurrencies      = []int32{CurrencyCoins, CurrencyGems, CurrencyChips}
-	defaultCurrencyBalance = make(map[int32]int32)
+	defaultCurrencies        = []int32{CurrencyCoins, CurrencyGems, CurrencyChips}
+	defaultCurrencyBalance   = make(map[int32]int32)
+	defaultUnlockedSkinsJson = `[0]`
+	defaultSkinId            = 0
+	defaultStartingBrawlerId = 0
 )
 
 func init() {

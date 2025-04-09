@@ -15,6 +15,9 @@ type PlayerBrawler struct {
 	SelectedStarPower *int32 `db:"selected_star_power"`
 	SelectedGear1     *int32 `db:"selected_gear1"`
 	SelectedGear2     *int32 `db:"selected_gear2"`
+
+	UnlockedSkinIds []int32 `db:"unlocked_skins"`
+	SelectedSkinId  int32   `db:"selected_skin"`
 }
 
 type PlayerCurrency struct {
@@ -49,6 +52,8 @@ type Player struct {
 	Wallet   map[int32]*PlayerCurrency
 
 	LoggedIn bool
+
+	state PlayerState
 }
 
 func NewPlayer() *Player {
@@ -56,4 +61,8 @@ func NewPlayer() *Player {
 		Brawlers: make(map[int32]*PlayerBrawler),
 		Wallet:   make(map[int32]*PlayerCurrency),
 	}
+}
+
+func (p *Player) SetState(state PlayerState) {
+	p.state = state
 }

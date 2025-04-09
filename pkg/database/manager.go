@@ -132,6 +132,26 @@ func (m *Manager) CreatePlayer(ctx context.Context, highId int32, lowId int32, n
 		}
 	}
 
+	// brawlers
+	stmt = `
+		insert into player_brawlers (
+			player_id, brawler_id, trophies, highest_trophies,
+			power_level, power_points,
+			unlocked_skins, selected_skin
+		)
+		values ($1, $2, 0, 0, 1, 0, $3, $4)`
+
+	_, err = tx.Exec(ctx, stmt,
+		newPlayerId,
+		defaultStartingBrawlerId,
+		defaultUnlockedSkinsJson,
+		defaultSkinId,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to insert starting brawler %d for player %d: %w", defaultStartingBrawlerId, newPlayerId, err)
+	}
+
 	err = tx.Commit(ctx)
 
 	if err != nil {
@@ -182,7 +202,8 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 	stmt = `
 		select
 			brawler_id, trophies, highest_trophies, power_level, power_points,
-			selected_gadget, selected_star_power, selected_gear1, selected_gear2
+			selected_gadget, selected_star_power, selected_gear1, selected_gear2,
+			unlocked_skins, selected_skin
 		from player_brawlers
 		where player_id = $1`
 
@@ -200,6 +221,7 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 		err = rowsBrawlers.Scan(
 			&b.BrawlerId, &b.Trophies, &b.HighestTrophies, &b.PowerLevel, &b.PowerPoints,
 			&b.SelectedGadget, &b.SelectedStarPower, &b.SelectedGear1, &b.SelectedGear2,
+			&b.UnlockedSkinIds, &b.SelectedSkinId,
 		)
 
 		if err != nil {

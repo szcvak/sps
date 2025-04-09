@@ -108,7 +108,9 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 		fmt.Printf("updated last_login for %s (%d)\n", player.Name, player.DbId)
 	}
 
+	player.SetState(core.StateLogin)
 	player.LoggedIn = true
+
 	wrapper.Player = player
 
 	msg := NewLoginOkMessage(l)
