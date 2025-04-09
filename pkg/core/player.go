@@ -51,8 +51,6 @@ type Player struct {
 	Brawlers map[int32]*PlayerBrawler
 	Wallet   map[int32]*PlayerCurrency
 
-	LoggedIn bool
-
 	state PlayerState
 }
 
@@ -60,9 +58,15 @@ func NewPlayer() *Player {
 	return &Player{
 		Brawlers: make(map[int32]*PlayerBrawler),
 		Wallet:   make(map[int32]*PlayerCurrency),
+
+		state: StateSession,
 	}
 }
 
 func (p *Player) SetState(state PlayerState) {
 	p.state = state
+}
+
+func (p *Player) State() PlayerState {
+	return p.state
 }

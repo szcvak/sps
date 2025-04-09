@@ -109,10 +109,12 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 	}
 
 	player.SetState(core.StateLogin)
-	player.LoggedIn = true
 
 	wrapper.Player = player
 
 	msg := NewLoginOkMessage(l)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
+
+	msg2 := NewOwnHomeDataMessage(wrapper)
+	wrapper.Send(msg2.PacketId(), msg2.PacketVersion(), msg2.Marshal())
 }

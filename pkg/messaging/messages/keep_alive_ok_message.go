@@ -6,14 +6,14 @@ func NewKeepAliveOkMessage() *KeepAliveOkMessage {
 	return &KeepAliveOkMessage{}
 }
 
-func (l *KeepAliveOkMessage) PacketId() uint16 {
+func (k *KeepAliveOkMessage) PacketId() uint16 {
 	return 20108
 }
 
-func (l *KeepAliveOkMessage) PacketVersion() uint16 {
+func (k *KeepAliveOkMessage) PacketVersion() uint16 {
 	return 1
 }
 
-func (l *KeepAliveOkMessage) Marshal() []byte {
+func (k *KeepAliveOkMessage) Marshal() []byte {
 	return make([]byte, 0)
 }
