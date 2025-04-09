@@ -1,13 +1,23 @@
 package core
 
 type Player struct {
-	name     string
-	loggedIn bool
+	Name     string
+	LoggedIn bool
+
+	HighId int32
+	LowId  int32
+
+	Token string
 }
 
 func NewPlayer(name string) *Player {
 	return &Player{
-		name:     name,
-		loggedIn: false,
+		Name:     name,
+		LoggedIn: false,
+
+		HighId: 0,
+		LowId:  0,
+
+		Token: "",
 	}
 }

@@ -11,7 +11,7 @@ import (
 
 type ClientWrapper struct {
 	conn   net.Conn
-	player *Player
+	Player *Player
 
 	encryptor *crypt.Rc4
 	decryptor *crypt.Rc4
@@ -28,7 +28,7 @@ func NewClientWrapper(conn net.Conn) *ClientWrapper {
 
 	return &ClientWrapper{
 		conn:   conn,
-		player: NewPlayer("Brawler"),
+		Player: NewPlayer("Brawler"),
 
 		encryptor: encryptor,
 		decryptor: decryptor,
@@ -36,7 +36,7 @@ func NewClientWrapper(conn net.Conn) *ClientWrapper {
 }
 
 func (w *ClientWrapper) Close() {
-	w.conn.Close()
+	_ = w.conn.Close()
 }
 
 func (w *ClientWrapper) Decrypt(payload []byte) {
@@ -48,12 +48,14 @@ func (w *ClientWrapper) Encrypt(payload []byte) {
 }
 
 func (w *ClientWrapper) Send(id uint16, version uint16, payload []byte) {
-	w.Encrypt(payload)
+	encrypted := make([]byte, len(payload))
+	copy(encrypted, payload)
 
-	packetSize := 2 + 3 + 2 + len(payload)
+	w.Encrypt(encrypted)
+	l := len(encrypted)
+
+	packetSize := 2 + 3 + 2 + l
 	packet := make([]byte, packetSize)
-
-	l := len(payload)
 
 	binary.BigEndian.PutUint16(packet[0:2], id)
 
@@ -63,15 +65,15 @@ func (w *ClientWrapper) Send(id uint16, version uint16, payload []byte) {
 
 	binary.BigEndian.PutUint16(packet[5:7], version)
 
-	copy(packet[7:], payload)
+	copy(packet[7:], encrypted)
 
-	_, err := w.conn.Write(payload)
+	_, err := w.conn.Write(packet)
 
 	if err != nil {
 		fmt.Println("failed to write payload:", err)
 	}
 
-	fmt.Printf("sent %d (%d bytes)\n", id, l)
+	fmt.Printf("sent %d (%d bytes, version %d)\n", id, len(packet), version)
 }
 
 func (w *ClientWrapper) Conn() net.Conn {

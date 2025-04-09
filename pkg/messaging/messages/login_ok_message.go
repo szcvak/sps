@@ -19,13 +19,13 @@ func (l *LoginOkMessage) PacketId() uint16 {
 }
 
 func (l *LoginOkMessage) PacketVersion() uint16 {
-	return 0
+	return 1
 }
 
 func (l *LoginOkMessage) Marshal() []byte {
 	stream := core.NewByteStreamWithCapacity(64)
 
-	stream.WriteInt(l.loginMessage.HighId)
+	stream.Write(l.loginMessage.HighId)
 	stream.Write(l.loginMessage.LowId)
 
 	stream.Write(l.loginMessage.HighId)

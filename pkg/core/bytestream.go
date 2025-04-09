@@ -17,7 +17,6 @@ const (
 )
 
 var (
-	ErrBufferTooSmall       = errors.New("buffer too small for read operation")
 	ErrStringTooLong        = errors.New("string is too long")
 	ErrStringNegativeLength = errors.New("string has negative length")
 )
@@ -32,7 +31,7 @@ type ByteStream struct {
 }
 
 func NewByteStream(initialBuffer []byte) *ByteStream {
-	var capacity int = defaultInitialCapacity
+	var capacity = defaultInitialCapacity
 
 	if initialBuffer != nil {
 		if cap(initialBuffer) > capacity {
@@ -175,7 +174,7 @@ func (b *ByteStream) ReadString() (string, error) {
 	return result, nil
 }
 
-func (b *ByteStream) ReadVInt() (int32, error) {
+func (b *ByteStream) ReadVInt() (VInt, error) {
 	b.bitOffset = 0
 
 	shift := uint(0)
@@ -209,7 +208,7 @@ func (b *ByteStream) ReadVInt() (int32, error) {
 				return 0, fmt.Errorf("failed to read variable-length int: value %d underflows int32", result)
 			}
 
-			return int32(result), nil
+			return VInt(result), nil
 		}
 	}
 
@@ -303,7 +302,7 @@ func (b *ByteStream) WriteVInt(value VInt) {
 // --- Utility --- //
 
 func (b *ByteStream) Write(value interface{}) {
-	switch v := any(value).(type) {
+	switch v := value.(type) {
 	case int32:
 		b.WriteInt(v)
 	case int:
@@ -315,7 +314,7 @@ func (b *ByteStream) Write(value interface{}) {
 	case string:
 		b.WriteString(v)
 	default:
-		fmt.Printf("can't write bytes because the type is not supported (%w)\n", v)
+		fmt.Printf("can't write bytes because the type is not supported (%T)\n", v)
 	}
 }
 

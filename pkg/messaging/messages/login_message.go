@@ -1,8 +1,6 @@
 package messages
 
 import (
-	"fmt"
-
 	"github.com/szcvak/sps/pkg/core"
 )
 
@@ -51,7 +49,9 @@ func (l *LoginMessage) Unmarshal(payload []byte) {
 	_, _ = stream.ReadString()
 
 	l.DeviceIdentifier, _ = stream.ReadString()
-	l.SystemLanguage, _ = stream.ReadVInt()
+
+	lang, _ := stream.ReadVInt()
+	l.SystemLanguage = int32(lang)
 
 	l.Region, _ = stream.ReadString()
 
@@ -63,7 +63,12 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper) {
 		return
 	}
 
-	fmt.Printf("%d, %d, %s, %d.%d.%d, %s, %s, %s, %d, %s", l.HighId, l.LowId, l.Token, l.Major, l.Minor, l.Build, l.FingerprintSha, l.DeviceUuid, l.DeviceIdentifier, l.SystemLanguage, l.Region)
+	wrapper.Player.Token = l.Token
+
+	wrapper.Player.HighId = l.HighId
+	wrapper.Player.LowId = l.LowId
+
+	wrapper.Player.LoggedIn = true
 
 	msg := NewLoginOkMessage(l)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
