@@ -5,5 +5,5 @@ const (
 	Rc4KeyNonce = "nonce"
 
 	MaximumRank         = 20
-	MaximumUpgradeLevel = 11
+	MaximumUpgradeLevel = 5
 )

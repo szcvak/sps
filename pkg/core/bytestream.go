@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"math"
-	"unicode/utf8"
 )
 
 const (
@@ -22,6 +22,18 @@ var (
 )
 
 type VInt int32
+
+type LogicLong struct {
+	F int32
+	S int32
+}
+
+type DataRef struct {
+	F int32
+	S int32
+}
+
+type ScId DataRef
 
 type ByteStream struct {
 	buffer []byte
@@ -69,7 +81,7 @@ func (b *ByteStream) Clear() {
 	b.bitOffset = 0
 }
 
-func (b *ByteStream) Destroy() {
+func (b *ByteStream) Close() {
 	b.buffer = nil
 	b.offset = 0
 	b.bitOffset = 0
@@ -83,23 +95,6 @@ func (b *ByteStream) ensureReadCapacity(n int) error {
 	return nil
 }
 
-func (b *ByteStream) ensureWriteCapacity(n int) {
-	needed := b.offset + n
-
-	if needed > cap(b.buffer) {
-		newCap := cap(b.buffer) * 2
-
-		if newCap < needed {
-			newCap = needed
-		}
-
-		newBuffer := make([]byte, len(b.buffer), newCap)
-		copy(newBuffer, b.buffer)
-
-		b.buffer = newBuffer
-	}
-}
-
 // --- Read operations --- //
 
 func (b *ByteStream) ReadBool() (bool, error) {
@@ -110,6 +105,11 @@ func (b *ByteStream) ReadBool() (bool, error) {
 	}
 
 	byteIndex := b.offset
+
+	if byteIndex >= len(b.buffer) {
+			return false, fmt.Errorf("readBool internal logic error: index out of bounds")
+	}
+
 	current := b.buffer[byteIndex]
 	value := (current >> b.bitOffset) & 1
 
@@ -122,6 +122,7 @@ func (b *ByteStream) ReadBool() (bool, error) {
 
 	return value != 0, nil
 }
+
 
 func (b *ByteStream) ReadInt() (int32, error) {
 	b.bitOffset = 0
@@ -140,10 +141,14 @@ func (b *ByteStream) ReadString() (string, error) {
 	length, err := b.ReadInt()
 
 	if err != nil {
-		return "", fmt.Errorf("failed to read string: %w", err)
+		return "", fmt.Errorf("failed to read string length: %w", err)
 	}
 
-	if length == -1 || length == 0 {
+	if length == -1 {
+		return "", nil
+	}
+
+	if length == 0 {
 		return "", nil
 	}
 
@@ -158,28 +163,22 @@ func (b *ByteStream) ReadString() (string, error) {
 	b.bitOffset = 0
 
 	if err := b.ensureReadCapacity(int(length)); err != nil {
-		return "", fmt.Errorf("failed to read string: %w", err)
+		return "", fmt.Errorf("failed to read string content: %w", err)
 	}
 
 	strBytes := b.buffer[b.offset : b.offset+int(length)]
-
-	if !utf8.Valid(strBytes) {
-		b.offset += int(length)
-		return "", fmt.Errorf("failed to read string: invalid utf8")
-	}
-
 	b.offset += int(length)
-	result := string(strBytes)
 
+	result := string(strBytes)
 	return result, nil
 }
+
 
 func (b *ByteStream) ReadVInt() (VInt, error) {
 	b.bitOffset = 0
 
 	shift := uint(0)
 	result := int64(0)
-
 	bytesRead := 0
 
 	for bytesRead < 5 {
@@ -188,7 +187,6 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 		}
 
 		bVal := b.buffer[b.offset]
-
 		b.offset++
 		bytesRead++
 
@@ -197,15 +195,15 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 		shift += 7
 
 		if (bVal & 0x80) == 0 {
-			signBitPos := uint(bytesRead * 7)
+			signBitMask := int64(1) << (shift - 1)
 
-			if signBitPos < 32 && (result>>(signBitPos-1))&1 != 0 {
-				mask := int64(-1) << signBitPos
+			if (result & signBitMask) != 0 {
+				mask := int64(-1) << shift
 				result |= mask
 			}
 
 			if result < math.MinInt32 || result > math.MaxInt32 {
-				return 0, fmt.Errorf("failed to read variable-length int: value %d underflows int32", result)
+				fmt.Printf("result is outside the bounds of int32: %d", result)
 			}
 
 			return VInt(result), nil
@@ -214,6 +212,7 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 
 	return 0, fmt.Errorf("failed to read variable-length int: read 5 bytes without termination")
 }
+
 
 // --- Write operations --- //
 
@@ -225,17 +224,20 @@ func (b *ByteStream) writeBytesInternal(data []byte) {
 func (b *ByteStream) WriteBool(value bool) {
 	if b.bitOffset == 0 {
 		b.buffer = append(b.buffer, 0)
-		b.offset++
+		b.offset = len(b.buffer)
 	}
 
-	last := len(b.buffer) - 1
+	lastByteIndex := len(b.buffer) - 1
 
 	if value {
-		b.buffer[last] |= 1 << (b.bitOffset & 31)
+		b.buffer[lastByteIndex] |= 1 << (b.bitOffset /* & 31 */)
+	} else {
+		b.buffer[lastByteIndex] &= ^(1 << b.bitOffset)
 	}
 
-	b.bitOffset = b.bitOffset + 1&7
+	b.bitOffset = (b.bitOffset + 1) & 7
 }
+
 
 func (b *ByteStream) WriteInt(value int32) {
 	b.bitOffset = 0
@@ -254,11 +256,18 @@ func (b *ByteStream) WriteString(value string) {
 		return
 	}
 
+	if value == "" {
+		b.WriteInt(0)
+		return
+	}
+
 	strBytes := []byte(value)
 	length := int32(len(strBytes))
 
 	if length > maxStringLength {
+		_, _ = fmt.Fprintf(os.Stderr, "will not write string because it is too long\n")
 		b.WriteInt(-1)
+
 		return
 	}
 
@@ -269,34 +278,93 @@ func (b *ByteStream) WriteString(value string) {
 	}
 }
 
-func (b *ByteStream) WriteVInt(value VInt) {
+func (b *ByteStream) WriteVInt(data VInt) {
 	b.bitOffset = 0
 
-	uval := uint32(value)
+	var final []byte
+	d := int32(data)
 
-	var buf [5]byte
-	idx := 0
-
-	zigzag := (uval << 1) ^ uint32(int32(uval)>>31)
-	result := zigzag
-
-	for {
-		temp := byte(result & 0x7F)
-		result >>= 7
-
-		if result != 0 {
-			temp |= 0x80
+	if d < 0 {
+		if d >= -63 {
+			final = append(final, byte((d&0x3F)|0x40))
+		} else if d >= -8191 {
+			final = append(final, byte((d&0x3F)|0xC0))
+			final = append(final, byte((uint32(d>>6))&0x7F))
+		} else if d >= -1048575 {
+			final = append(final, byte((d&0x3F)|0xC0))
+			final = append(final, byte(((uint32(d>>6))&0x7F)|0x80))
+			final = append(final, byte((uint32(d>>13))&0x7F))
+		} else if d >= -134217727 {
+			final = append(final, byte((d&0x3F)|0xC0))
+			final = append(final, byte(((uint32(d>>6))&0x7F)|0x80))
+			final = append(final, byte(((uint32(d>>13))&0x7F)|0x80))
+			final = append(final, byte((uint32(d>>20))&0x7F))
+		} else {
+			final = append(final, byte((d&0x3F)|0xC0))
+			final = append(final, byte(((uint32(d>>6))&0x7F)|0x80))
+			final = append(final, byte(((uint32(d>>13))&0x7F)|0x80))
+			final = append(final, byte(((uint32(d>>20))&0x7F)|0x80))
+			final = append(final, byte((uint32(d>>27))&0x0F))
 		}
-
-		buf[idx] = temp
-		idx++
-
-		if result == 0 {
-			break
+	} else {
+		if d <= 63 {
+			final = append(final, byte(d&0x3F))
+		} else if d <= 8191 {
+			final = append(final, byte((d&0x3F)|0x80))
+			final = append(final, byte((uint32(d>>6))&0x7F))
+		} else if d <= 1048575 {
+			final = append(final, byte((d&0x3F)|0x80))
+			final = append(final, byte(((uint32(d>>6))&0x7F)|0x80))
+			final = append(final, byte((uint32(d>>13))&0x7F))
+		} else if d <= 134217727 {
+			final = append(final, byte((d&0x3F)|0x80))
+			final = append(final, byte(((uint32(d>>6))&0x7F)|0x80))
+			final = append(final, byte(((uint32(d>>13))&0x7F)|0x80))
+			final = append(final, byte((uint32(d>>20))&0x7F))
+		} else {
+			final = append(final, byte((d&0x3F)|0x80))
+			final = append(final, byte(((uint32(d>>6))&0x7F)|0x80))
+			final = append(final, byte(((uint32(d>>13))&0x7F)|0x80))
+			final = append(final, byte(((uint32(d>>20))&0x7F)|0x80))
+			final = append(final, byte((uint32(d>>27))&0x0F))
 		}
 	}
 
-	b.writeBytesInternal(buf[:idx])
+	b.writeBytesInternal(final)
+}
+
+
+func (b *ByteStream) WriteDataRef(value DataRef) {
+	b.WriteVInt(VInt(value.F))
+
+	if value.F != 0 {
+		b.WriteVInt(VInt(value.S))
+	}
+}
+
+func (b *ByteStream) WriteScId(value ScId) {
+	b.WriteDataRef(DataRef(value))
+}
+
+func (b *ByteStream) WriteLogicLong(value LogicLong) {
+	b.bitOffset = 0
+
+	b.WriteVInt(VInt(value.F))
+	b.WriteVInt(VInt(value.S))
+}
+
+func (b *ByteStream) WriteArrayVInt(value []VInt) {
+	b.bitOffset = 0
+
+	b.WriteVInt(VInt(len(value)))
+
+	for _, element := range value {
+		b.WriteVInt(element)
+	}
+}
+
+func (b *ByteStream) WriteByte(value byte) {
+	b.buffer = append(b.buffer, value & 0xFF)
 }
 
 // --- Utility --- //
@@ -313,11 +381,25 @@ func (b *ByteStream) Write(value interface{}) {
 		b.WriteBool(v)
 	case string:
 		b.WriteString(v)
+	case DataRef:
+		b.WriteDataRef(v)
+	case ScId:
+		b.WriteScId(v)
+	case LogicLong:
+		b.WriteLogicLong(v)
+	case []VInt:
+		b.WriteArrayVInt(v)
+	case byte:
+		b.WriteByte(v)
 	default:
-		fmt.Printf("can't write bytes because the type is not supported (%T)\n", v)
+		_, _ = fmt.Fprintf(os.Stderr, "write(x) unsupported type (%T)\n", v)
 	}
 }
 
 func (b *ByteStream) Buffer() []byte {
 	return b.buffer
+}
+
+func (b *ByteStream) Offset() int {
+	return b.offset
 }

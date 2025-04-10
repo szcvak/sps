@@ -6,9 +6,14 @@ import (
 
 	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/network"
+	"github.com/szcvak/sps/pkg/csv"
 )
 
 func main() {
+	if err := csv.LoadAll(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "failed to load cards: %w\n", err)
+	}
+
 	dbm, err := database.NewManager()
 
 	if err != nil {

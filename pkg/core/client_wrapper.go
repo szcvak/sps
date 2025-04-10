@@ -48,6 +48,7 @@ func (w *ClientWrapper) Encrypt(payload []byte) {
 }
 
 func (w *ClientWrapper) Send(id uint16, version uint16, payload []byte) {
+
 	encrypted := make([]byte, len(payload))
 	copy(encrypted, payload)
 

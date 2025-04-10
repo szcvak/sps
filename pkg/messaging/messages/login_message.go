@@ -38,6 +38,7 @@ func (l *LoginMessage) Unmarshalled() bool {
 
 func (l *LoginMessage) Unmarshal(payload []byte) {
 	stream := core.NewByteStream(payload)
+	defer stream.Close()
 
 	l.HighId, _ = stream.ReadInt()
 	l.LowId, _ = stream.ReadInt()
@@ -117,4 +118,10 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 
 	msg2 := NewOwnHomeDataMessage(wrapper)
 	wrapper.Send(msg2.PacketId(), msg2.PacketVersion(), msg2.Marshal())
+
+	msg3 := NewClanStreamMessage()
+	wrapper.Send(msg3.PacketId(), msg3.PacketVersion(), msg3.Marshal())
+
+	msg4 := NewMyAllianceMessage()
+	wrapper.Send(msg4.PacketId(), msg4.PacketVersion(), msg4.Marshal())
 }

@@ -124,28 +124,29 @@ func (m *Manager) CreatePlayer(ctx context.Context, highId int32, lowId int32, n
 	// player wallet
 	stmt = `insert into player_wallet (player_id, currency_id, balance) VALUES ($1, $2, $3)`
 
-	for _, currencyId := range defaultCurrencies {
-		_, err = tx.Exec(ctx, stmt, newPlayerId, currencyId, defaultCurrencyBalance[currencyId])
+	for _, currencyId := range DefaultCurrencies {
+		_, err = tx.Exec(ctx, stmt, newPlayerId, currencyId, DefaultCurrencyBalance[currencyId])
 
 		if err != nil {
 			return fmt.Errorf("failed to insert currency %d for player %d: %w", currencyId, newPlayerId, err)
 		}
 	}
 
-	// brawlers
+	// brawler
 	stmt = `
 		insert into player_brawlers (
 			player_id, brawler_id, trophies, highest_trophies,
 			power_level, power_points,
-			unlocked_skins, selected_skin
+			unlocked_skins, selected_skin, cards
 		)
-		values ($1, $2, 0, 0, 1, 0, $3, $4)`
+		values ($1, $2, 0, 0, 1, 0, $3, $4, $5)`
 
 	_, err = tx.Exec(ctx, stmt,
 		newPlayerId,
 		defaultStartingBrawlerId,
 		defaultUnlockedSkinsJson,
 		defaultSkinId,
+		defaultBrawlerCards,
 	)
 
 	if err != nil {
@@ -177,14 +178,14 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 	// core/progression
 	stmt := `
 		select
-			p.id, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login,
+			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login,
 			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories
 		from players p
 		join player_progression pp ON p.id = pp.player_id
 		where p.token = $1`
 
 	err = conn.QueryRow(ctx, stmt, token).Scan(
-		&player.DbId, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin,
+		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin,
 		&player.Trophies, &player.HighestTrophies, &player.SoloVictories, &player.DuoVictories, &player.TrioVictories,
 	)
 
@@ -203,7 +204,7 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 		select
 			brawler_id, trophies, highest_trophies, power_level, power_points,
 			selected_gadget, selected_star_power, selected_gear1, selected_gear2,
-			unlocked_skins, selected_skin
+			unlocked_skins, selected_skin, cards
 		from player_brawlers
 		where player_id = $1`
 
@@ -221,7 +222,7 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 		err = rowsBrawlers.Scan(
 			&b.BrawlerId, &b.Trophies, &b.HighestTrophies, &b.PowerLevel, &b.PowerPoints,
 			&b.SelectedGadget, &b.SelectedStarPower, &b.SelectedGear1, &b.SelectedGear2,
-			&b.UnlockedSkinIds, &b.SelectedSkinId,
+			&b.UnlockedSkinIds, &b.SelectedSkinId, &b.Cards,
 		)
 
 		if err != nil {
@@ -267,4 +268,12 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 	fmt.Printf("loaded data for player %s (%d)\n", player.Name, playerId)
 
 	return player, nil
+}
+
+func (m *Manager) Exec(query string, args ...interface{}) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := m.Pool().Exec(ctx, query, args...)
+	return err
 }

@@ -17,6 +17,11 @@ const (
     
     token text unique not null,
     region text not null,
+
+		battle_hints boolean not null default false,
+		control_mode smallint not null default 0,
+
+		coin_booster int not null default 0,
     
     created_at timestamptz not null default current_timestamp,
     last_login timestamptz not null default current_timestamp
@@ -49,6 +54,8 @@ const (
 	selected_gear2 int default null,
 	
 	unlocked_skins jsonb not null default '[]'::jsonb,
+	cards jsonb not null default '{}'::jsonb,
+
 	selected_skin int not null default 0,
 	
 	unlocked_at timestamptz not null default current_timestamp,
@@ -119,17 +126,19 @@ var (
 // --- Other --- //
 
 var (
-	defaultCurrencies        = []int32{CurrencyCoins, CurrencyGems, CurrencyChips}
-	defaultCurrencyBalance   = make(map[int32]int32)
+	DefaultCurrencies        = []int32{CurrencyCoins, CurrencyGems, CurrencyChips}
+	DefaultCurrencyBalance   = make(map[int32]int32)
+
 	defaultUnlockedSkinsJson = `[0]`
+	defaultBrawlerCards      = `{"0": 1}`
 	defaultSkinId            = 0
 	defaultStartingBrawlerId = 0
 )
 
 func init() {
-	defaultCurrencyBalance[CurrencyCoins] = 1000
-	defaultCurrencyBalance[CurrencyGems] = 50
-	defaultCurrencyBalance[CurrencyBling] = 0
-	defaultCurrencyBalance[CurrencyChips] = 0
-	defaultCurrencyBalance[CurrencyElixir] = 0
+	DefaultCurrencyBalance[CurrencyCoins] = 1000
+	DefaultCurrencyBalance[CurrencyGems] = 50
+	DefaultCurrencyBalance[CurrencyBling] = 0
+	DefaultCurrencyBalance[CurrencyChips] = 0
+	DefaultCurrencyBalance[CurrencyElixir] = 0
 }
