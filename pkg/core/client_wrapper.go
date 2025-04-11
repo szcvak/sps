@@ -2,7 +2,7 @@ package core
 
 import (
 	"encoding/binary"
-	"fmt"
+	"log/slog"
 	"net"
 
 	"github.com/szcvak/sps/pkg/config"
@@ -48,7 +48,6 @@ func (w *ClientWrapper) Encrypt(payload []byte) {
 }
 
 func (w *ClientWrapper) Send(id uint16, version uint16, payload []byte) {
-
 	encrypted := make([]byte, len(payload))
 	copy(encrypted, payload)
 
@@ -71,10 +70,10 @@ func (w *ClientWrapper) Send(id uint16, version uint16, payload []byte) {
 	_, err := w.conn.Write(packet)
 
 	if err != nil {
-		fmt.Println("failed to write payload:", err)
+		slog.Error("failed to write payload!", "err", err)
 	}
 
-	fmt.Printf("sent %d (%d bytes, version %d)\n", id, len(packet), version)
+	slog.Debug("sent packet", "id", id, "size", len(packet), "ver", version)
 }
 
 func (w *ClientWrapper) Conn() net.Conn {

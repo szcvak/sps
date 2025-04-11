@@ -2,10 +2,10 @@ package core
 
 import (
 	"encoding/binary"
+	"log/slog"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"math"
 )
 
@@ -173,46 +173,105 @@ func (b *ByteStream) ReadString() (string, error) {
 	return result, nil
 }
 
-
 func (b *ByteStream) ReadVInt() (VInt, error) {
 	b.bitOffset = 0
 
-	shift := uint(0)
-	result := int64(0)
-	bytesRead := 0
+	initialOffset := b.offset
 
-	for bytesRead < 5 {
-		if b.offset >= len(b.buffer) {
-			return 0, fmt.Errorf("failed to read variable-length int: %w", io.EOF)
+	if initialOffset >= len(b.buffer) {
+		return 0, io.EOF
+	}
+
+	firstByte := b.buffer[initialOffset]
+	bytesRead := 1
+
+	var result int32 = int32(firstByte & 0x3F)
+
+	if (firstByte & 0x40) != 0 {
+		if (firstByte & 0x80) != 0 {
+			if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+
+			byte2 := b.buffer[initialOffset+bytesRead]
+			bytesRead++
+
+			result = (result & ^int32(0x1FC0)) | (int32(byte2&0x7F) << 6)
+
+			if (byte2 & 0x80) != 0 {
+				if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+
+				byte3 := b.buffer[initialOffset+bytesRead]
+				bytesRead++
+
+				result = (result & ^int32(0xFE000)) | (int32(byte3&0x7F) << 13)
+
+				if (byte3 & 0x80) != 0 {
+					if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+
+					byte4 := b.buffer[initialOffset+bytesRead]
+					bytesRead++
+
+					result = (result & ^int32(0x7F00000)) | (int32(byte4&0x7F) << 20)
+
+					if (byte4 & 0x80) != 0 {
+						if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+
+						byte5 := b.buffer[initialOffset+bytesRead]
+						bytesRead++
+
+						result = (result & 0x7FFFFFFF) | (int32(byte5&0x0F) << 27) | math.MinInt32
+					} else {
+						result |= int32(-134217728)
+					}
+				} else {
+					result |= int32(-1048576)
+				}
+			} else {
+				result |= int32(-8192)
+			}
+		} else {
+			result |= int32(-64)
 		}
 
-		bVal := b.buffer[b.offset]
-		b.offset++
+	} else if (firstByte & 0x80) != 0 {
+		if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+
+		byte2 := b.buffer[initialOffset+bytesRead]
 		bytesRead++
 
-		data := int64(bVal & 0x7F)
-		result |= data << shift
-		shift += 7
+		result = (result & ^int32(0x1FC0)) | (int32(byte2&0x7F) << 6)
 
-		if (bVal & 0x80) == 0 {
-			signBitMask := int64(1) << (shift - 1)
+		if (byte2 & 0x80) != 0 {
+			if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
 
-			if (result & signBitMask) != 0 {
-				mask := int64(-1) << shift
-				result |= mask
+			byte3 := b.buffer[initialOffset+bytesRead]
+			bytesRead++
+
+			result = (result & ^int32(0xFE000)) | (int32(byte3&0x7F) << 13)
+
+			if (byte3 & 0x80) != 0 {
+				if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+
+				byte4 := b.buffer[initialOffset+bytesRead]
+				bytesRead++
+
+				result = (result & ^int32(0x7F00000)) | (int32(byte4&0x7F) << 20)
+
+				if (byte4 & 0x80) != 0 {
+					if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+
+					byte5 := b.buffer[initialOffset+bytesRead]
+					bytesRead++
+
+					result = (result & 0x7FFFFFFF) | (int32(byte5&0x0F) << 27)
+				}
 			}
-
-			if result < math.MinInt32 || result > math.MaxInt32 {
-				fmt.Printf("result is outside the bounds of int32: %d", result)
-			}
-
-			return VInt(result), nil
 		}
 	}
 
-	return 0, fmt.Errorf("failed to read variable-length int: read 5 bytes without termination")
-}
+	b.offset = initialOffset + bytesRead
 
+	return VInt(result), nil
+}
 
 // --- Write operations --- //
 
@@ -265,7 +324,7 @@ func (b *ByteStream) WriteString(value string) {
 	length := int32(len(strBytes))
 
 	if length > maxStringLength {
-		_, _ = fmt.Fprintf(os.Stderr, "will not write string because it is too long\n")
+		slog.Error("will not write string because it is too long", "size", length)
 		b.WriteInt(-1)
 
 		return
@@ -392,7 +451,7 @@ func (b *ByteStream) Write(value interface{}) {
 	case byte:
 		b.WriteByte(v)
 	default:
-		_, _ = fmt.Fprintf(os.Stderr, "write(x) unsupported type (%T)\n", v)
+		slog.Warn("faled to write(x): unsupported type!", "value", v)
 	}
 }
 

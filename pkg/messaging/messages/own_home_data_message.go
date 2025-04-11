@@ -1,11 +1,10 @@
 package messages
 
 import (
-	"os"
-	"fmt"
 	"time"
 	"strconv"
 	"math/rand"
+	"log/slog"
 
 	"github.com/szcvak/sps/pkg/csv"
 	"github.com/szcvak/sps/pkg/core"
@@ -35,7 +34,6 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 	player := o.wrapper.Player
 
 	if player.State() != core.StateLogin {
-		_, _ = fmt.Fprintf(os.Stderr, "ohd received but player is not in StateLogin state\n")
 		return make([]byte, 0)
 	}
 
@@ -265,7 +263,7 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 			id, e := strconv.Atoi(card)
 
 			if e != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "failed to convert %s into a number\n", card)
+				slog.Error("failed to convert card to int!", "card", card)
 				continue
 			}
 

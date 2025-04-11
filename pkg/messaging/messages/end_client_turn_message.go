@@ -1,8 +1,7 @@
 package messages
 
 import (
-	"fmt"
-	"os"
+	"log/slog"
 
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
@@ -12,35 +11,53 @@ import (
 type EndClientTurnMessage struct {
 	amount core.VInt
 	id core.VInt
+
+	stream *core.ByteStream
+
+	unmarshalled bool
 }
 
 func NewEndClientTurnMessage() *EndClientTurnMessage {
-	return &EndClientTurnMessage{}
+	return &EndClientTurnMessage {
+		unmarshalled: false,
+	}
 }
 
 func (e *EndClientTurnMessage) Unmarshal(data []byte) {
 	stream := core.NewByteStream(data)
-	defer stream.Close()
 
 	_, _ = stream.ReadBool()
 
-	_, _ = stream.ReadVInt()
-	_, _ = stream.ReadVInt()
+	for i := 0; i < 3; i++ {
+		_, _ = stream.ReadVInt()
+	}
 
 	e.amount, _ = stream.ReadVInt()
 	e.id, _ = stream.ReadVInt()
+
+	e.unmarshalled = true
+	e.stream = stream
 }
 
-func (e *EndClientTurnMessage) Process(wrapper *core.ClientWrapper, _ *database.Manager) {
-	_, exists := messaging.ClientCommands[int(e.id)]
-
-	if !exists {
-		_, _ = fmt.Fprintf(os.Stderr, "client command %d does not exist\n", e.id)
+func (e *EndClientTurnMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
+	if !e.unmarshalled {
 		return
 	}
 
-	fmt.Printf("received client command: %d (%d amount)\n", e.id, e.amount)
+	if wrapper.Player.DbId <= 0 || wrapper.Player.State() != core.StateLoggedIn {
+		return
+	}
 
-	//msg := factory()
-	//msg.Unmarshal(
+	factory, exists := messaging.ClientCommands[int(e.id)]
+
+	if !exists {
+		slog.Warn("got unknown client command", "id", e.id, "amt", e.amount)
+		return
+	}
+
+	slog.Info("got client command", "id", e.id, "amt", e.amount)
+
+	msg := factory()
+	msg.UnmarshalStream(e.stream)
+	msg.Process(wrapper, dbm)
 }

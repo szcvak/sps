@@ -1,6 +1,7 @@
 package csv
 
 import (
+	"log/slog"
 	"fmt"
 	"os"
 	"io"
@@ -14,17 +15,17 @@ var (
 
 // --- Private methods --- //
 
-func initCards() error {
+func loadCards() error {
 	if cardsCsv != nil {
 		return nil
 	}
 
-	fmt.Println("initializing cards.csv")
+	slog.Info("loading cards.csv")
 
 	file, err := os.Open("assets/csv_logic/cards.csv")
 
 	if err != nil {
-		return fmt.Errorf("failed to load cards.csv: %w\n", err)
+		return err
 	}
 
 	defer file.Close()
@@ -58,17 +59,17 @@ func initCards() error {
 	return nil
 }
 
-func initLocations() error {
+func loadLocations() error {
 	if locationsCsv != nil {
 		return nil
 	}
 
-	fmt.Println("initializing locations.csv")
+	slog.Info("loading locations.csv")
 
 	file, err := os.Open("assets/csv_logic/locations.csv")
 
 	if err != nil {
-		return fmt.Errorf("failed to load locations.csv: %w\n", err)
+		return err
 	}
 
 	defer file.Close()
@@ -106,7 +107,7 @@ func initLocations() error {
 
 func CardIds() []int {
 	if cardsCsv == nil {
-		_, _ = fmt.Fprintf(os.Stderr, "can't call CardIds() because cards.csv has not been initialized yet\n")
+		slog.Error("cards.csv has not been loaded yet!")
 		return make([]int, 0)
 	}
 
@@ -119,9 +120,29 @@ func CardIds() []int {
 	return temp
 }
 
+func IsCardUnlocked(card int) bool {
+	if cardsCsv == nil {
+		slog.Error("cards.csv has not been loaded yet!")
+		return false
+	}
+	
+	for line, row := range cardsCsv {
+		if line != card {
+			continue
+		}
+		
+		data := row[5]
+		
+		return data == "unlock"
+	}
+	
+	slog.Error("failed to find card!", "cardId", card)
+	return false
+}
+
 func LocationIds() []int {
 	if locationsCsv == nil {
-		_, _ = fmt.Fprintf(os.Stderr, "can't call LocationIds() because locations.csv has not been initialized yet\n")
+		slog.Error("locations.csv has not been loaded yet!")
 		return make([]int, 0)
 	}
 

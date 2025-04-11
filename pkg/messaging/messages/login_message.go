@@ -3,11 +3,11 @@ package messages
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log/slog"
+
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/messaging"
-	"os"
 )
 
 type LoginMessage struct {
@@ -77,7 +77,7 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 			err = dbm.CreatePlayer(context.Background(), l.HighId, l.LowId, "Undefined", l.Token, l.Region)
 
 			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "error creating player: %v\n", err)
+				slog.Error("failed to create player!", "err", err)
 
 				failMsg := NewLoginFailedMessage(l, "The server is currently experiencing some issues. Sorry!", messaging.LoginFailed)
 				wrapper.Send(failMsg.PacketId(), failMsg.PacketVersion(), failMsg.Marshal())
@@ -90,7 +90,7 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 
 			return
 		} else {
-			_, _ = fmt.Fprintf(os.Stderr, "error querying player by token %s: %v\n", l.Token, err)
+			slog.Error("failed to find player!", "token", l.Token, "err", err)
 
 			failMsg := NewLoginFailedMessage(l, "The server is currently experiencing some issues. Sorry!", messaging.LoginFailed)
 			wrapper.Send(failMsg.PacketId(), failMsg.PacketVersion(), failMsg.Marshal())
@@ -104,9 +104,7 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 	_, err = dbm.Pool().Exec(context.Background(), stmt, player.DbId)
 
 	if err != nil {
-		fmt.Printf("(non-halting) failed to update last_login for player %d: %v\n", player.DbId, err)
-	} else {
-		fmt.Printf("updated last_login for %s (%d)\n", player.Name, player.DbId)
+		slog.Warn("(failed to update last_login!", "playerId", player.DbId, "err", err)
 	}
 
 	player.SetState(core.StateLogin)

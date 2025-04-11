@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"os"
+	"log/slog"
 
 	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/network"
@@ -11,13 +10,13 @@ import (
 
 func main() {
 	if err := csv.LoadAll(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to load cards: %w\n", err)
+		slog.Error("failed to load cards!", "err", err)
 	}
 
 	dbm, err := database.NewManager()
 
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "unable to connect to database: %v\n", err)
+		slog.Error("failed to connect to psql!", "err", err)
 		return
 	}
 
@@ -26,7 +25,7 @@ func main() {
 	err = dbm.CreateDefault()
 
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to create default tables: %v\n", err)
+		slog.Error("failed to create default db tables!", "err", err)
 		return
 	}
 
@@ -34,6 +33,6 @@ func main() {
 	err = server.Serve()
 
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "unable to start server: %v\n", err)
+		slog.Error("failed to start serving!", "err", err)
 	}
 }

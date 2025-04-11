@@ -17,4 +17,5 @@ func init() {
 	registerClientMessage(10212, func() messaging.ClientMessage { return messages.NewChangeAvatarNameMessage() })
 	registerClientMessage(10107, func() messaging.ClientMessage { return messages.NewClientCapabilitiesMessage() })
 	registerClientMessage(14102, func() messaging.ClientMessage { return messages.NewEndClientTurnMessage() })
+	registerClientMessage(14113, func() messaging.ClientMessage { return messages.NewAskProfileMessage() })
 }

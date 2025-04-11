@@ -1,6 +1,8 @@
 package messaging
 
 import (
+	"log/slog"
+
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
 )
@@ -10,7 +12,7 @@ type ServerCommand interface {
 }
 
 type ClientCommand interface {
-	Unmarshal(data []byte)
+	UnmarshalStream(stream *core.ByteStream)
 	Process(wrapper *core.ClientWrapper, dbm *database.Manager)
 }
 
@@ -19,22 +21,15 @@ var (
 	ClientCommands = make(map[int]func() ClientCommand)
 )
 
-func registerServerCommand(id int, factory func(payload interface{}) ServerCommand) {
-	ServerCommands[id] = factory
-}
-
-func registerClientCommand(id int, factory func() ClientCommand) {
-	ClientCommands[id] = factory
-}
-
 func init() {
 	// --- Server --- //
 	ServerCommands[201] = func(payload interface{}) ServerCommand { switch v := payload.(type) { case string: return NewChangeAvatarNameCommand(v); default: return nil }}
 
 	// --- Client --- //
+	ClientCommands[509] = func() ClientCommand { return NewClientSelectControlModeCommand() }
 }
 
-// --- Commands --- //
+// --- Server commands --- //
 
 type ChangeAvatarNameCommand struct {
 	name string
@@ -57,4 +52,33 @@ func (c *ChangeAvatarNameCommand) Marshal(stream *core.ByteStream) {
 	stream.Write(core.VInt(0))
 	stream.Write(core.VInt(0))
 	stream.Write(core.VInt(1))
+}
+
+// --- Client commands --- //
+
+type ClientSelectControlModeCommand struct {
+	controlMode core.VInt
+}
+
+func NewClientSelectControlModeCommand() *ClientSelectControlModeCommand {
+	return &ClientSelectControlModeCommand{}
+}
+
+func (c *ClientSelectControlModeCommand) UnmarshalStream(stream *core.ByteStream) {
+	for i := 0; i < 4; i++ {
+		stream.ReadVInt()
+	}
+
+	c.controlMode, _ = stream.ReadVInt()
+}
+
+func (c *ClientSelectControlModeCommand) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
+	wrapper.Player.ControlMode = int32(c.controlMode)
+
+	if err := dbm.Exec("update players set control_mode = $1 where id = $2", c.controlMode, wrapper.Player.DbId); err != nil {
+		slog.Error("failed to update control mode!", "err", err, "playerId", wrapper.Player.DbId)
+		return
+	}
+
+	slog.Debug("changed control mode", "playerId", wrapper.Player.DbId, "mode", c.controlMode)
 }

@@ -1,12 +1,13 @@
 package network
 
 import (
+	"sync/atomic"
 	"encoding/binary"
-	"fmt"
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
 	"io"
 	"net"
+	"log/slog"
 )
 
 type Server struct {
@@ -15,6 +16,8 @@ type Server struct {
 	quitch  chan struct{}
 
 	dbm *database.Manager
+
+	totalClients atomic.Int64
 }
 
 func NewServer(address string, dbm *database.Manager) *Server {
@@ -29,10 +32,10 @@ func (s *Server) Serve() error {
 	ln, err := net.Listen("tcp", s.address)
 
 	if err != nil {
-		return fmt.Errorf("failed to start the server: %w", err)
+		return err
 	}
 
-	fmt.Println("started serving on", s.address)
+	slog.Info("serving", "address", s.address)
 
 	defer ln.Close()
 	s.ln = ln
@@ -49,11 +52,12 @@ func (s *Server) accept() {
 		conn, err := s.ln.Accept()
 
 		if err != nil {
-			fmt.Println("server accept error:", err)
+			slog.Error("failed to accept client!", "err", err)
 			continue
 		}
 
-		fmt.Println("received connection from", conn.RemoteAddr())
+		s.totalClients.Add(1)
+		slog.Info("client connected", "total", s.totalClients.Load())
 
 		wrapper := core.NewClientWrapper(conn)
 
@@ -62,7 +66,11 @@ func (s *Server) accept() {
 }
 
 func (s *Server) handleClient(wrapper *core.ClientWrapper) {
-	defer wrapper.Close()
+	defer func() {
+		s.totalClients.Add(-1)
+		slog.Info("client disconnected", "total", s.totalClients.Load())
+		wrapper.Close()
+	}()
 
 	conn := wrapper.Conn()
 	header := make([]byte, 7)
@@ -71,10 +79,8 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 		_, err := conn.Read(header)
 
 		if err != nil {
-			if err == io.EOF {
-				fmt.Printf("client disconnected (%s)\n", conn.RemoteAddr())
-			} else {
-				fmt.Println("failed to read header: ", err)
+			if err != io.EOF {
+				slog.Error("failed to read packet header!", "err", err)
 			}
 
 			break
@@ -84,14 +90,14 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 		payloadSize := uint32(header[2])<<16 | uint32(header[3])<<8 | uint32(header[4])
 		_ = binary.BigEndian.Uint16(header[5:])
 
-		fmt.Printf("received packet %d (%d bytes) (%s)\n", packetId, payloadSize, conn.RemoteAddr())
+		slog.Info("got packet", "id", packetId, "size", payloadSize)
 
 		payload := make([]byte, payloadSize)
 
-		_, err2 := conn.Read(payload)
+		_, err = conn.Read(payload)
 
-		if err2 != nil {
-			fmt.Println("failed to read header:", err2)
+		if err != nil {
+			slog.Error("failed to read payload!", "err", err)
 			break
 		}
 
@@ -100,7 +106,7 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 		factory, exists := ClientRegistry[packetId]
 
 		if !exists {
-			fmt.Println("no processor for id", packetId)
+			slog.Warn("got unknown packet", "id", packetId)
 			continue
 		}
 
