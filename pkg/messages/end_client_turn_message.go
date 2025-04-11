@@ -1,16 +1,16 @@
 package messages
 
 import (
+	"github.com/szcvak/sps/pkg/messaging"
 	"log/slog"
 
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
-	"github.com/szcvak/sps/pkg/messaging"
 )
 
 type EndClientTurnMessage struct {
 	amount core.VInt
-	id core.VInt
+	id     core.VInt
 
 	stream *core.ByteStream
 
@@ -18,7 +18,7 @@ type EndClientTurnMessage struct {
 }
 
 func NewEndClientTurnMessage() *EndClientTurnMessage {
-	return &EndClientTurnMessage {
+	return &EndClientTurnMessage{
 		unmarshalled: false,
 	}
 }

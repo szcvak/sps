@@ -3,9 +3,9 @@ package main
 import (
 	"log/slog"
 
+	"github.com/szcvak/sps/pkg/csv"
 	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/network"
-	"github.com/szcvak/sps/pkg/csv"
 )
 
 func main() {

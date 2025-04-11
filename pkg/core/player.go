@@ -16,7 +16,7 @@ type PlayerBrawler struct {
 	SelectedGear1     *int32 `db:"selected_gear1"`
 	SelectedGear2     *int32 `db:"selected_gear2"`
 
-	UnlockedSkinIds []int32 `db:"unlocked_skins"`
+	UnlockedSkinIds []int32          `db:"unlocked_skins"`
 	Cards           map[string]int32 `db:"cards"`
 
 	SelectedSkinId int32 `db:"selected_skin"`
@@ -47,10 +47,13 @@ type Player struct {
 	DuoVictories  int32 `db:"duo_victories"`
 	TrioVictories int32 `db:"trio_victories"`
 
-	BattleHints bool `db:"battle_hints"`
-	ControlMode int32 `db:"control_mode"`
+	BattleHints   bool  `db:"battle_hints"`
+	ControlMode   int32 `db:"control_mode"`
+	TutorialState int32 `db:"tutorial_state"`
 
 	CoinBooster int32 `db:"coin_booster"`
+	CoinsReward int32 `db:"coins_reward"`
+	Experience  int32 `db:"experience"`
 
 	CreatedAt time.Time `db:"created_at"`
 	LastLogin time.Time `db:"last_login"`

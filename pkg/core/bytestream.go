@@ -2,10 +2,10 @@ package core
 
 import (
 	"encoding/binary"
-	"log/slog"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 )
 
@@ -107,7 +107,7 @@ func (b *ByteStream) ReadBool() (bool, error) {
 	byteIndex := b.offset
 
 	if byteIndex >= len(b.buffer) {
-			return false, fmt.Errorf("readBool internal logic error: index out of bounds")
+		return false, fmt.Errorf("readBool internal logic error: index out of bounds")
 	}
 
 	current := b.buffer[byteIndex]
@@ -122,7 +122,6 @@ func (b *ByteStream) ReadBool() (bool, error) {
 
 	return value != 0, nil
 }
-
 
 func (b *ByteStream) ReadInt() (int32, error) {
 	b.bitOffset = 0
@@ -189,7 +188,9 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 
 	if (firstByte & 0x40) != 0 {
 		if (firstByte & 0x80) != 0 {
-			if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+			if initialOffset+bytesRead >= len(b.buffer) {
+				return 0, io.EOF
+			}
 
 			byte2 := b.buffer[initialOffset+bytesRead]
 			bytesRead++
@@ -197,7 +198,9 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 			result = (result & ^int32(0x1FC0)) | (int32(byte2&0x7F) << 6)
 
 			if (byte2 & 0x80) != 0 {
-				if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+				if initialOffset+bytesRead >= len(b.buffer) {
+					return 0, io.EOF
+				}
 
 				byte3 := b.buffer[initialOffset+bytesRead]
 				bytesRead++
@@ -205,7 +208,9 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 				result = (result & ^int32(0xFE000)) | (int32(byte3&0x7F) << 13)
 
 				if (byte3 & 0x80) != 0 {
-					if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+					if initialOffset+bytesRead >= len(b.buffer) {
+						return 0, io.EOF
+					}
 
 					byte4 := b.buffer[initialOffset+bytesRead]
 					bytesRead++
@@ -213,7 +218,9 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 					result = (result & ^int32(0x7F00000)) | (int32(byte4&0x7F) << 20)
 
 					if (byte4 & 0x80) != 0 {
-						if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+						if initialOffset+bytesRead >= len(b.buffer) {
+							return 0, io.EOF
+						}
 
 						byte5 := b.buffer[initialOffset+bytesRead]
 						bytesRead++
@@ -233,7 +240,9 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 		}
 
 	} else if (firstByte & 0x80) != 0 {
-		if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+		if initialOffset+bytesRead >= len(b.buffer) {
+			return 0, io.EOF
+		}
 
 		byte2 := b.buffer[initialOffset+bytesRead]
 		bytesRead++
@@ -241,7 +250,9 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 		result = (result & ^int32(0x1FC0)) | (int32(byte2&0x7F) << 6)
 
 		if (byte2 & 0x80) != 0 {
-			if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+			if initialOffset+bytesRead >= len(b.buffer) {
+				return 0, io.EOF
+			}
 
 			byte3 := b.buffer[initialOffset+bytesRead]
 			bytesRead++
@@ -249,7 +260,9 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 			result = (result & ^int32(0xFE000)) | (int32(byte3&0x7F) << 13)
 
 			if (byte3 & 0x80) != 0 {
-				if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+				if initialOffset+bytesRead >= len(b.buffer) {
+					return 0, io.EOF
+				}
 
 				byte4 := b.buffer[initialOffset+bytesRead]
 				bytesRead++
@@ -257,7 +270,9 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 				result = (result & ^int32(0x7F00000)) | (int32(byte4&0x7F) << 20)
 
 				if (byte4 & 0x80) != 0 {
-					if initialOffset+bytesRead >= len(b.buffer) { return 0, io.EOF }
+					if initialOffset+bytesRead >= len(b.buffer) {
+						return 0, io.EOF
+					}
 
 					byte5 := b.buffer[initialOffset+bytesRead]
 					bytesRead++
@@ -271,6 +286,39 @@ func (b *ByteStream) ReadVInt() (VInt, error) {
 	b.offset = initialOffset + bytesRead
 
 	return VInt(result), nil
+}
+
+func (b *ByteStream) ReadDataRef() (DataRef, error) {
+	classId, err := b.ReadVInt()
+
+	if err != nil {
+		return DataRef{}, fmt.Errorf("failed to read class id: %w", err)
+	}
+
+	if classId == 0 {
+		return DataRef{F: 0, S: 0}, nil
+	}
+
+	instanceId, err := b.ReadVInt()
+
+	if err != nil {
+		return DataRef{}, fmt.Errorf("failed to read instance id (class id was %d): %w", classId, err)
+	}
+
+	return DataRef{
+		F: int32(classId),
+		S: int32(instanceId),
+	}, nil
+}
+
+func (b *ByteStream) ReadScId() (ScId, error) {
+	dataRef, err := b.ReadDataRef()
+
+	if err != nil {
+		return ScId{}, fmt.Errorf("failed to read underlying DataRef: %w", err)
+	}
+
+	return ScId(dataRef), nil
 }
 
 // --- Write operations --- //
@@ -296,7 +344,6 @@ func (b *ByteStream) WriteBool(value bool) {
 
 	b.bitOffset = (b.bitOffset + 1) & 7
 }
-
 
 func (b *ByteStream) WriteInt(value int32) {
 	b.bitOffset = 0
@@ -392,7 +439,6 @@ func (b *ByteStream) WriteVInt(data VInt) {
 	b.writeBytesInternal(final)
 }
 
-
 func (b *ByteStream) WriteDataRef(value DataRef) {
 	b.WriteVInt(VInt(value.F))
 
@@ -423,7 +469,7 @@ func (b *ByteStream) WriteArrayVInt(value []VInt) {
 }
 
 func (b *ByteStream) WriteByte(value byte) {
-	b.buffer = append(b.buffer, value & 0xFF)
+	b.buffer = append(b.buffer, value&0xFF)
 }
 
 // --- Utility --- //

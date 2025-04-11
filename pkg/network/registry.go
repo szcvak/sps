@@ -1,8 +1,8 @@
 package network
 
 import (
+	"github.com/szcvak/sps/pkg/messages"
 	"github.com/szcvak/sps/pkg/messaging"
-	"github.com/szcvak/sps/pkg/messaging/messages"
 )
 
 var ClientRegistry = make(map[uint16]func() messaging.ClientMessage)
@@ -19,4 +19,5 @@ func init() {
 	registerClientMessage(14102, func() messaging.ClientMessage { return messages.NewEndClientTurnMessage() })
 	registerClientMessage(14113, func() messaging.ClientMessage { return messages.NewAskProfileMessage() })
 	registerClientMessage(14109, func() messaging.ClientMessage { return messages.NewGoHomeFromOfflineMessage() })
+	registerClientMessage(14110, func() messaging.ClientMessage { return messages.NewAskForBattleEndMessage() })
 }

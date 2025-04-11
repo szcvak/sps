@@ -2,13 +2,15 @@ package database
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"log/slog"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/szcvak/sps/pkg/config"
 	"github.com/szcvak/sps/pkg/core"
+	"log/slog"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -82,85 +84,151 @@ func (m *Manager) CreateDefault() error {
 	return nil
 }
 
-func (m *Manager) CreatePlayer(ctx context.Context, highId int32, lowId int32, name string, token string, region string) error {
+func (m *Manager) CreatePlayer(ctx context.Context, highId int32, lowId int32, name string, token string, region string) (*core.Player, error) {
 	tx, err := m.pool.Begin(ctx)
 
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	defer tx.Rollback(ctx)
 
 	var newPlayerId int64
+	var createdAt time.Time
 
-	// players
-	stmt := `
-		insert into players (name, token, high_id, low_id, region)
-		values ($1, $2, $3, $4, $5)
-		returning id`
-	err = tx.QueryRow(ctx, stmt, name, token, highId, lowId, region).Scan(&newPlayerId)
+	playerInsertSQL := `
+		INSERT INTO players (name, token, high_id, low_id, region, last_login)
+		VALUES ($1, $2, $3, $4, $5, current_timestamp)
+		RETURNING id, created_at`
+
+	err = tx.QueryRow(ctx, playerInsertSQL, name, token, highId, lowId, region).Scan(&newPlayerId, &createdAt)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
 
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return fmt.Errorf("%w: %v", ErrAccountAlreadyExists, pgErr.ConstraintName)
+			return nil, fmt.Errorf("%w: %v", ErrAccountAlreadyExists, pgErr.ConstraintName)
 		}
 
-		return fmt.Errorf("failed to insert player: %w", err)
+		return nil, fmt.Errorf("failed to insert player: %w", err)
 	}
 
-	// player progression
-	stmt = `
-		insert into player_progression (player_id)
-		values ($1)`
-	_, err = tx.Exec(ctx, stmt, newPlayerId)
+	progressionInsertSQL := `
+		INSERT INTO player_progression (player_id, trophies, highest_trophies, solo_victories, duo_victories, trio_victories)
+		VALUES ($1, $2, $2, 0, 0, 0)`
+
+	_, err = tx.Exec(ctx, progressionInsertSQL, newPlayerId, config.NewPlayerTrophies)
 
 	if err != nil {
-		return fmt.Errorf("failed to insert player progression for player %d: %w", newPlayerId, err)
+		return nil, fmt.Errorf("failed to insert player progression for player %d: %w", newPlayerId, err)
 	}
 
-	// player wallet
-	stmt = `insert into player_wallet (player_id, currency_id, balance) VALUES ($1, $2, $3)`
+	walletInsertSQL := `INSERT INTO player_wallet (player_id, currency_id, balance) VALUES ($1, $2, $3)`
+	newPlayerWallet := make(map[int32]*core.PlayerCurrency)
 
-	for _, currencyId := range DefaultCurrencies {
-		_, err = tx.Exec(ctx, stmt, newPlayerId, currencyId, DefaultCurrencyBalance[currencyId])
+	for _, currencyId := range config.DefaultCurrencies {
+		balance := config.DefaultCurrencyBalance[currencyId]
+
+		_, err = tx.Exec(ctx, walletInsertSQL, newPlayerId, currencyId, balance)
 
 		if err != nil {
-			return fmt.Errorf("failed to insert currency %d for player %d: %w", currencyId, newPlayerId, err)
+			return nil, fmt.Errorf("failed to insert currency %d for player %d: %w", currencyId, newPlayerId, err)
+		}
+
+		newPlayerWallet[currencyId] = &core.PlayerCurrency{
+			CurrencyId: currencyId,
+			Balance:    int64(balance),
 		}
 	}
 
-	// brawler
-	stmt = `
-		insert into player_brawlers (
+	var unlocked []int32
+
+	err = json.Unmarshal([]byte(defaultUnlockedSkinsJson), &unlocked)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse default unlocked skins JSON: %w", err)
+	}
+
+	var defaultCardsMap map[string]int32
+
+	err = json.Unmarshal([]byte(defaultBrawlerCards), &defaultCardsMap)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse default cards JSON '%s': %w", defaultBrawlerCards, err)
+	}
+
+	startingBrawler := &core.PlayerBrawler{
+		BrawlerId:         config.NewPlayerStartingBrawlerId,
+		Trophies:          0,
+		HighestTrophies:   0,
+		PowerLevel:        1,
+		PowerPoints:       0,
+		SelectedGadget:    nil,
+		SelectedStarPower: nil,
+		SelectedGear1:     nil,
+		SelectedGear2:     nil,
+		UnlockedSkinIds:   unlocked,
+		SelectedSkinId:    int32(defaultSkinId),
+		Cards:             defaultCardsMap,
+	}
+
+	brawlerInsertSQL := `
+		INSERT INTO player_brawlers (
 			player_id, brawler_id, trophies, highest_trophies,
 			power_level, power_points,
 			unlocked_skins, selected_skin, cards
 		)
-		values ($1, $2, 0, 0, 1, 0, $3, $4, $5)`
+		VALUES ($1, $2, 0, 0, 1, 0, $3, $4, $5)`
 
-	_, err = tx.Exec(ctx, stmt,
+	_, err = tx.Exec(ctx, brawlerInsertSQL,
 		newPlayerId,
-		defaultStartingBrawlerId,
+		config.NewPlayerStartingBrawlerId,
 		defaultUnlockedSkinsJson,
 		defaultSkinId,
 		defaultBrawlerCards,
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to insert starting brawler %d for player %d: %w", defaultStartingBrawlerId, newPlayerId, err)
+		return nil, fmt.Errorf("failed to insert starting brawler %d for player %d: %w", config.NewPlayerStartingBrawlerId, newPlayerId, err)
 	}
 
 	err = tx.Commit(ctx)
 
 	if err != nil {
-		return fmt.Errorf("failed to commit transaction for player %d: %w", newPlayerId, err)
+		return nil, fmt.Errorf("failed to commit transaction for player %d: %w", newPlayerId, err)
 	}
 
-	slog.Info("created player", "id", newPlayerId)
+	player := core.NewPlayer()
 
-	return nil
+	player.DbId = newPlayerId
+	player.HighId = highId
+	player.LowId = lowId
+	player.Name = name
+	player.Token = token
+	player.Region = region
+	player.CreatedAt = createdAt
+	player.LastLogin = createdAt
+	player.ProfileIcon = 0
+
+	player.Trophies = config.NewPlayerTrophies
+	player.HighestTrophies = config.NewPlayerTrophies
+	player.SoloVictories = 0
+	player.DuoVictories = 0
+	player.TrioVictories = 0
+
+	player.BattleHints = false
+	player.ControlMode = 0
+	player.CoinBooster = 0
+
+	player.Wallet = newPlayerWallet
+
+	player.Brawlers[config.NewPlayerStartingBrawlerId] = startingBrawler
+
+	player.SetState(core.StateSession)
+
+	slog.Info("created player", "id", newPlayerId, "name", name)
+
+	return player, nil
 }
 
 func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Player, error) {
@@ -177,15 +245,15 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 	// core/progression
 	stmt := `
 		select
-			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login,
-			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories
+			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward,
+			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories, pp.experience
 		from players p
 		join player_progression pp ON p.id = pp.player_id
 		where p.token = $1`
 
 	err = conn.QueryRow(ctx, stmt, token).Scan(
-		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin,
-		&player.Trophies, &player.HighestTrophies, &player.SoloVictories, &player.DuoVictories, &player.TrioVictories,
+		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward,
+		&player.Trophies, &player.HighestTrophies, &player.SoloVictories, &player.DuoVictories, &player.TrioVictories, &player.Experience,
 	)
 
 	if err != nil {
@@ -281,15 +349,15 @@ func (m *Manager) LoadPlayerByIds(ctx context.Context, highId int32, lowId int32
 	// core/progression
 	stmt := `
 		select
-			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login,
-			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories
+			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward,
+			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories, pp.experience
 		from players p
 		join player_progression pp ON p.id = pp.player_id
 		where p.high_id = $1 and p.low_id = $2`
 
 	err = conn.QueryRow(ctx, stmt, highId, lowId).Scan(
-		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin,
-		&player.Trophies, &player.HighestTrophies, &player.SoloVictories, &player.DuoVictories, &player.TrioVictories,
+		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward,
+		&player.Trophies, &player.HighestTrophies, &player.SoloVictories, &player.DuoVictories, &player.TrioVictories, &player.Experience,
 	)
 
 	if err != nil {

@@ -1,18 +1,17 @@
-package messages
+package messaging
 
 import (
 	"github.com/szcvak/sps/pkg/core"
-	"github.com/szcvak/sps/pkg/messaging"
 )
 
 type AvailableServerCommandMessage struct {
-	id int
+	id      int
 	payload interface{}
 }
 
 func NewAvailableServerCommandMessage(id int, payload interface{}) *AvailableServerCommandMessage {
-	return &AvailableServerCommandMessage {
-		id: id,
+	return &AvailableServerCommandMessage{
+		id:      id,
 		payload: payload,
 	}
 }
@@ -28,7 +27,7 @@ func (a *AvailableServerCommandMessage) PacketVersion() uint16 {
 func (a *AvailableServerCommandMessage) Marshal() []byte {
 	stream := core.NewByteStreamWithCapacity(32)
 
-	factory, exists := messaging.ServerCommands[a.id]
+	factory, exists := ServerCommands[a.id]
 
 	if !exists {
 		return []byte{}

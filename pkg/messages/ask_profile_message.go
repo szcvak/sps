@@ -10,7 +10,7 @@ import (
 
 type AskProfileMessage struct {
 	highId int32
-	lowId int32
+	lowId  int32
 }
 
 func NewAskProfileMessage() *AskProfileMessage {
@@ -31,12 +31,12 @@ func (a *AskProfileMessage) Process(wrapper *core.ClientWrapper, dbm *database.M
 	}
 
 	player, err := dbm.LoadPlayerByIds(context.Background(), a.highId, a.lowId)
-	
+
 	if err != nil {
 		slog.Error("failed to find player by ids!", "err", err)
 		return
 	}
-	
+
 	msg := NewProfileMessage(player)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 }

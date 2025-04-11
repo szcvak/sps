@@ -1,15 +1,15 @@
 package csv
 
 import (
-	"log/slog"
-	"fmt"
-	"os"
-	"io"
 	"encoding/csv"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
 )
 
 var (
-	cardsCsv map[int][]string = nil
+	cardsCsv     map[int][]string = nil
 	locationsCsv map[int][]string = nil
 )
 
@@ -125,19 +125,36 @@ func IsCardUnlocked(card int) bool {
 		slog.Error("cards.csv has not been loaded yet!")
 		return false
 	}
-	
+
 	for line, row := range cardsCsv {
 		if line != card {
 			continue
 		}
-		
+
 		data := row[5]
-		
+
 		return data == "unlock"
 	}
-	
+
 	slog.Error("failed to find card!", "cardId", card)
 	return false
+}
+
+func GetBrawlersWithRarity(rarity string) []int32 {
+	if cardsCsv == nil {
+		slog.Error("cards.csv has not been loaded yet!")
+		return []int32{}
+	}
+
+	brawlers := make([]int32, 0)
+
+	for line, row := range cardsCsv {
+		if row[5] == "unlock" && row[10] == rarity {
+			brawlers = append(brawlers, int32(line))
+		}
+	}
+
+	return brawlers
 }
 
 func LocationIds() []int {

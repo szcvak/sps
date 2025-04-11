@@ -18,10 +18,12 @@ const (
     token text unique not null,
     region text not null,
 
-		battle_hints boolean not null default false,
-		control_mode smallint not null default 0,
+	battle_hints boolean not null default false,
+	control_mode smallint not null default 0,
+	tutorial_state int not null default 0,
 
-		coin_booster int not null default 0,
+	coin_booster int not null default 0,
+	coins_reward int not null default 0,
     
     created_at timestamptz not null default current_timestamp,
     last_login timestamptz not null default current_timestamp
@@ -35,7 +37,9 @@ const (
 	trio_victories int not null default 0,
 	
 	trophies int not null default 0,
-	highest_trophies int not null default 0
+	highest_trophies int not null default 0,
+	
+	experience int not null default 0
 );`
 
 	playerBrawlers = `CREATE TABLE IF NOT EXISTS player_brawlers (
@@ -106,16 +110,6 @@ const (
 );`
 )
 
-// --- Identifiers --- //
-
-const (
-	CurrencyCoins  int32 = 1
-	CurrencyGems         = 2
-	CurrencyBling        = 3
-	CurrencyChips        = 5
-	CurrencyElixir       = 6
-)
-
 // --- Errors --- //
 
 var (
@@ -126,19 +120,7 @@ var (
 // --- Other --- //
 
 var (
-	DefaultCurrencies        = []int32{CurrencyCoins, CurrencyGems, CurrencyChips, CurrencyBling, CurrencyElixir}
-	DefaultCurrencyBalance   = make(map[int32]int32)
-
 	defaultUnlockedSkinsJson = `[0]`
 	defaultBrawlerCards      = `{"0": 1}`
 	defaultSkinId            = 0
-	defaultStartingBrawlerId = 0
 )
-
-func init() {
-	DefaultCurrencyBalance[CurrencyCoins] = 1000
-	DefaultCurrencyBalance[CurrencyGems] = 50
-	DefaultCurrencyBalance[CurrencyBling] = 0
-	DefaultCurrencyBalance[CurrencyChips] = 0
-	DefaultCurrencyBalance[CurrencyElixir] = 0
-}

@@ -23,7 +23,23 @@ var (
 
 func init() {
 	// --- Server --- //
-	ServerCommands[201] = func(payload interface{}) ServerCommand { switch v := payload.(type) { case string: return NewChangeAvatarNameCommand(v); default: return nil }}
+	ServerCommands[201] = func(payload interface{}) ServerCommand {
+		switch v := payload.(type) {
+		case string:
+			return NewChangeAvatarNameCommand(v)
+		default:
+			return nil
+		}
+	}
+
+	ServerCommands[203] = func(payload interface{}) ServerCommand {
+		switch v := payload.(type) {
+		case *DeliveryLogic:
+			return v
+		}
+
+		return nil
+	}
 
 	// --- Client --- //
 	ClientCommands[509] = func() ClientCommand { return NewClientSelectControlModeCommand() }
@@ -37,7 +53,7 @@ type ChangeAvatarNameCommand struct {
 }
 
 func NewChangeAvatarNameCommand(name string) *ChangeAvatarNameCommand {
-	return &ChangeAvatarNameCommand {
+	return &ChangeAvatarNameCommand{
 		name: name,
 	}
 }
@@ -106,5 +122,11 @@ func (c *ClientGatchaCommand) UnmarshalStream(stream *core.ByteStream) {
 
 func (c *ClientGatchaCommand) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
 	slog.Info("giving box", "playerId", wrapper.Player.DbId, "boxType", c.boxType)
-}
 
+	logic := NewDeliveryLogic(wrapper, dbm)
+	logic.GenerateRewards(int32(c.boxType))
+
+	msg := NewAvailableServerCommandMessage(203, logic)
+
+	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
+}

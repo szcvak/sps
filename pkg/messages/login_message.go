@@ -71,10 +71,11 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 	}
 
 	player, err := dbm.LoadPlayerByToken(context.Background(), l.Token)
+	isNew := false
 
 	if err != nil {
 		if errors.Is(err, database.ErrPlayerNotFound) {
-			err = dbm.CreatePlayer(context.Background(), l.HighId, l.LowId, "Undefined", l.Token, l.Region)
+			temp, err := dbm.CreatePlayer(context.Background(), l.HighId, l.LowId, "Undefined", l.Token, l.Region)
 
 			if err != nil {
 				slog.Error("failed to create player!", "err", err)
@@ -85,10 +86,8 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 				return
 			}
 
-			failMsg := NewLoginFailedMessage(l, "Your account has been created. Please reload the game.", messaging.LoginFailed)
-			wrapper.Send(failMsg.PacketId(), failMsg.PacketVersion(), failMsg.Marshal())
-
-			return
+			isNew = true
+			player = temp
 		} else {
 			slog.Error("failed to find player!", "token", l.Token, "err", err)
 
@@ -99,22 +98,23 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 		}
 	}
 
-	stmt := `update players set last_login = current_timestamp where id = $1`
+	if !isNew {
+		stmt := `update players set last_login = current_timestamp where id = $1`
 
-	_, err = dbm.Pool().Exec(context.Background(), stmt, player.DbId)
+		_, err = dbm.Pool().Exec(context.Background(), stmt, player.DbId)
 
-	if err != nil {
-		slog.Warn("(failed to update last_login!", "playerId", player.DbId, "err", err)
+		if err != nil {
+			slog.Warn("(failed to update last_login!", "playerId", player.DbId, "err", err)
+		}
 	}
 
 	player.SetState(core.StateLogin)
-
 	wrapper.Player = player
 
 	msg := NewLoginOkMessage(l)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 
-	msg2 := NewOwnHomeDataMessage(wrapper)
+	msg2 := NewOwnHomeDataMessage(wrapper, dbm)
 	wrapper.Send(msg2.PacketId(), msg2.PacketVersion(), msg2.Marshal())
 
 	msg3 := NewClanStreamMessage()

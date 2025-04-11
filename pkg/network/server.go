@@ -1,13 +1,13 @@
 package network
 
 import (
-	"sync/atomic"
 	"encoding/binary"
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
 	"io"
-	"net"
 	"log/slog"
+	"net"
+	"sync/atomic"
 )
 
 type Server struct {
