@@ -18,4 +18,5 @@ func init() {
 	registerClientMessage(10107, func() messaging.ClientMessage { return messages.NewClientCapabilitiesMessage() })
 	registerClientMessage(14102, func() messaging.ClientMessage { return messages.NewEndClientTurnMessage() })
 	registerClientMessage(14113, func() messaging.ClientMessage { return messages.NewAskProfileMessage() })
+	registerClientMessage(14109, func() messaging.ClientMessage { return messages.NewGoHomeFromOfflineMessage() })
 }

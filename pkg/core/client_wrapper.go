@@ -73,7 +73,7 @@ func (w *ClientWrapper) Send(id uint16, version uint16, payload []byte) {
 		slog.Error("failed to write payload!", "err", err)
 	}
 
-	slog.Debug("sent packet", "id", id, "size", len(packet), "ver", version)
+	slog.Info("sent packet", "id", id, "size", len(packet), "ver", version)
 }
 
 func (w *ClientWrapper) Conn() net.Conn {

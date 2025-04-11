@@ -126,7 +126,7 @@ var (
 // --- Other --- //
 
 var (
-	DefaultCurrencies        = []int32{CurrencyCoins, CurrencyGems, CurrencyChips}
+	DefaultCurrencies        = []int32{CurrencyCoins, CurrencyGems, CurrencyChips, CurrencyBling, CurrencyElixir}
 	DefaultCurrencyBalance   = make(map[int32]int32)
 
 	defaultUnlockedSkinsJson = `[0]`

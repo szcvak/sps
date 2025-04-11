@@ -33,10 +33,6 @@ func (o *OwnHomeDataMessage) PacketVersion() uint16 {
 func (o *OwnHomeDataMessage) Marshal() []byte {
 	player := o.wrapper.Player
 
-	if player.State() != core.StateLogin {
-		return make([]byte, 0)
-	}
-
 	player.SetState(core.StateLoggedIn)
 
 	stream := core.NewByteStreamWithCapacity(128)
@@ -310,7 +306,7 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 	}
 
 	stream.Write(core.VInt(player.Wallet[database.CurrencyGems].Balance))
-	stream.Write(core.VInt(13))
+	stream.Write(core.VInt(0))
 
 	stream.Write(core.VInt(0))
 	stream.Write(core.VInt(0))
@@ -329,6 +325,6 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 }
 
 var (
-	requiredBrawlers = []int{0, 0, 0, 0}
+	requiredBrawlers = []int{0, 3, 5, 8}
 	progressStart = []int{0,10,20,30,40,60,80,100,120,140,160,180,220,260,300,340,380,420,460,500,550,600,650,700,750,800,850,900,950,1000,1050,1100,1150,1200}
 )

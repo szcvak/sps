@@ -114,7 +114,7 @@ func (p *ProfileMessage) Marshal() []byte {
 	stream.Write(true) // is in alliance
 	stream.Write(0) // high id
 	stream.Write(1) // low id
-	stream.Write("Primo Team") // name
+	stream.Write("The best") // name
 	stream.Write(core.ScId{8, 19}) // icon
 	
 	stream.Write(core.VInt(1)) // type

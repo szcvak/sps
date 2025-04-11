@@ -27,6 +27,7 @@ func init() {
 
 	// --- Client --- //
 	ClientCommands[509] = func() ClientCommand { return NewClientSelectControlModeCommand() }
+	ClientCommands[500] = func() ClientCommand { return NewClientGatchaCommand() }
 }
 
 // --- Server commands --- //
@@ -60,9 +61,19 @@ type ClientSelectControlModeCommand struct {
 	controlMode core.VInt
 }
 
+type ClientGatchaCommand struct {
+	boxType core.VInt
+}
+
 func NewClientSelectControlModeCommand() *ClientSelectControlModeCommand {
 	return &ClientSelectControlModeCommand{}
 }
+
+func NewClientGatchaCommand() *ClientGatchaCommand {
+	return &ClientGatchaCommand{}
+}
+
+// Control mode //
 
 func (c *ClientSelectControlModeCommand) UnmarshalStream(stream *core.ByteStream) {
 	for i := 0; i < 4; i++ {
@@ -80,5 +91,20 @@ func (c *ClientSelectControlModeCommand) Process(wrapper *core.ClientWrapper, db
 		return
 	}
 
-	slog.Debug("changed control mode", "playerId", wrapper.Player.DbId, "mode", c.controlMode)
+	slog.Info("changed control mode", "playerId", wrapper.Player.DbId, "mode", c.controlMode)
 }
+
+// Gatcha //
+
+func (c *ClientGatchaCommand) UnmarshalStream(stream *core.ByteStream) {
+	for i := 0; i < 4; i++ {
+		stream.ReadVInt()
+	}
+
+	c.boxType, _ = stream.ReadVInt()
+}
+
+func (c *ClientGatchaCommand) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
+	slog.Info("giving box", "playerId", wrapper.Player.DbId, "boxType", c.boxType)
+}
+
