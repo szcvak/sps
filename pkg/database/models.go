@@ -23,8 +23,9 @@ const (
 	tutorial_state int not null default 0,
 
 	coin_booster int not null default 0,
+	coin_doubler int not null default 0,
 	coins_reward int not null default 0,
-    
+
     created_at timestamptz not null default current_timestamp,
     last_login timestamptz not null default current_timestamp
 );`
@@ -107,6 +108,52 @@ const (
 	balance int not null check ( balance >= 0 ),
 	
 	primary key (player_id, currency_id)
+);`
+
+	alliances = `CREATE TABLE IF NOT EXISTS alliances (
+    id bigserial primary key,
+
+    name varchar(30) not null unique,
+    description text default null,
+	
+    badge_id int not null default 0,
+    type smallint not null default 1,
+	
+    required_trophies int not null default 0,
+    total_trophies int not null default 0,
+
+    created_at timestamptz not null default current_timestamp,
+    creator_id bigint references players (id) on delete set null
+);`
+
+	allianceMembers = `CREATE TABLE IF NOT EXISTS alliance_members (
+    alliance_id bigint references alliances (id) on delete cascade,
+    player_id bigint references players (id) on delete cascade,
+
+    role smallint not null default 1,
+    joined_at timestamptz not null default current_timestamp,
+
+    primary key (alliance_id, player_id)
+);`
+
+	allianceMessages = `CREATE TABLE IF NOT EXISTS alliance_messages (
+    id bigserial primary key,
+    alliance_id bigint references alliances (id) on delete cascade not null,
+    player_id bigint references players (id) on delete set null,
+
+    player_high_id int not null,
+    player_low_id int not null,
+    player_name varchar(15) not null,
+    player_role smallint not null,
+    player_icon int not null,
+
+    message_type smallint not null,
+    message_content text,
+
+    target_id bigint default null,
+    target_name varchar(15) default null,
+
+    created_at timestamptz not null default current_timestamp
 );`
 )
 

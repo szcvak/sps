@@ -20,4 +20,10 @@ func init() {
 	registerClientMessage(14113, func() messaging.ClientMessage { return messages.NewAskProfileMessage() })
 	registerClientMessage(14109, func() messaging.ClientMessage { return messages.NewGoHomeFromOfflineMessage() })
 	registerClientMessage(14110, func() messaging.ClientMessage { return messages.NewAskForBattleEndMessage() })
+	registerClientMessage(14303, func() messaging.ClientMessage { return messages.NewAskForJoinableAlliancesMessage() })
+	registerClientMessage(14302, func() messaging.ClientMessage { return messages.NewAskForAllianceDataMessage() })
+	registerClientMessage(14315, func() messaging.ClientMessage { return messages.NewAllianceChatMessage() })
+	registerClientMessage(14316, func() messaging.ClientMessage { return messages.NewAllianceEditMessage() })
+	registerClientMessage(14305, func() messaging.ClientMessage { return messages.NewAllianceJoinMessage() })
+	registerClientMessage(14308, func() messaging.ClientMessage { return messages.NewAllianceLeaveMessage() })
 }

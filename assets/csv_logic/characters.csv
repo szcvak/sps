@@ -33,4 +33,3 @@ BullDude,,"BullDudeWeapon","BullDudeUlti",,650,1200,,,,,,,,12,,120,100,"Hero",,"
 "LaserBall",,,,,0,1,,,,,,,,,,,,"LaserBall",,"BallDefault",,,,,,,,"laser_ball_goal",,,,,,,,,,,,,,,,,80,80,,,25,170,,,120,,,,,,,,,,,,,,,,,,,,,,160,,,
 "LootBox",,,,,0,1500,,,,,,,,,,,,"LootBox",,,"sc/level.sc","powerup_barrel","powerup_barrel","powerup_barrel_shadow",,,,"Gen_wood_explosion",,,,,,,,,,,,,,,,35,100,-100,0,0,0,100,,,145,"Medium",-40,,350,,,,,,,,,,,,,,,"footstep",25,400,160,,,
 TutorialDummy3,,,,,0,50,,,,,,,,12,,,,"Minion_Building_charges_ulti",,"TntGuyDefault",,,,,,,"takedamage_gen","death_bull_dude","Gen_move_fx",,,,,,,,,,,,,,,35,80,80,,,35,110,,,145,"Medium",-45,,350,,,,,,,,,,,,,,,"footstep",25,400,160,,,
-,

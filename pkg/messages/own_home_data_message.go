@@ -1,15 +1,13 @@
 package messages
 
 import (
-	"github.com/szcvak/sps/pkg/database"
 	"log/slog"
-	"math/rand"
 	"strconv"
 	"time"
 
+	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/config"
 	"github.com/szcvak/sps/pkg/core"
-	"github.com/szcvak/sps/pkg/csv"
 )
 
 type OwnHomeDataMessage struct {
@@ -40,7 +38,6 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 	stream := core.NewByteStreamWithCapacity(128)
 
 	brawlerTrophies := 0
-	locations := csv.LocationIds()
 
 	if config.MaximumRank <= 34 {
 		brawlerTrophies = progressStart[config.MaximumRank-1]
@@ -76,13 +73,13 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 
 	stream.Write(core.VInt(len(nonZeroSkins)))
 
-	for skin := range nonZeroSkins {
+	for _, skin := range nonZeroSkins {
 		stream.Write(core.DataRef{29, int32(skin)})
 	}
 
 	// overall owned skins for Brawlers
 
-	nonZeroSkins = nil
+	nonZeroSkins = make([]int32, 0, len(player.Brawlers)*2)
 
 	for _, data := range player.Brawlers {
 		for skin := range data.UnlockedSkinIds {
@@ -94,7 +91,7 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 
 	stream.Write(core.VInt(len(nonZeroSkins)))
 
-	for skin := range nonZeroSkins {
+	for _, skin := range nonZeroSkins {
 		stream.Write(core.DataRef{29, int32(skin)})
 	}
 
@@ -109,7 +106,7 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 
 	stream.Write(core.VInt(player.ControlMode))
 	stream.Write(player.BattleHints)
-	stream.Write(core.VInt(0)) // coin doubler
+	stream.Write(core.VInt(player.CoinDoubler))
 
 	// coin booster
 
@@ -164,68 +161,8 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 	stream.Write([]core.VInt{3, 10, 20, 60, 200, 500})
 	stream.Write([]core.VInt{0, 30, 80, 170, 0, 0})
 
-	// events
-
-	stream.Write(core.VInt(4))
-
-	for i := 0; i < 4; i++ {
-		stream.Write(core.VInt(i + 1))
-		stream.Write(core.VInt(requiredBrawlers[i]))
-	}
-
-	// disponible events
-
-	stream.Write(core.VInt(4))
-
-	for i := 0; i < 4; i++ {
-		stream.Write(core.VInt(i + 1))
-		stream.Write(core.VInt(i + 1))
-
-		stream.Write(core.VInt(1))
-		stream.Write(core.VInt(39120))
-		stream.Write(core.VInt(8))
-		stream.Write(core.VInt(8))
-		stream.Write(core.VInt(999))
-
-		stream.Write(false)
-		stream.Write(i == 4)
-
-		stream.Write(core.ScId{15, int32(locations[rand.Intn(len(locations))])})
-
-		stream.Write(core.VInt(0))
-		stream.Write(core.VInt(2))
-
-		stream.Write("szcvak's servers")
-		stream.Write(false)
-	}
-
-	// coming soon events
-
-	stream.Write(core.VInt(4))
-
-	for i := 0; i < 4; i++ {
-		stream.Write(core.VInt(i + 1))
-		stream.Write(core.VInt(i + 1))
-
-		stream.Write(core.VInt(1337))
-		stream.Write(core.VInt(39120))
-		stream.Write(core.VInt(8))
-		stream.Write(core.VInt(8))
-		stream.Write(core.VInt(999))
-
-		stream.Write(false)
-		stream.Write(i == 4)
-
-		stream.Write(core.ScId{15, int32(locations[rand.Intn(len(locations))])})
-
-		stream.Write(core.VInt(0))
-		stream.Write(core.VInt(2))
-
-		stream.Write("szcvak's servers")
-		stream.Write(false)
-	}
-
-	// end
+	em := core.GetEventManager()
+	em.Embed(stream)
 
 	stream.Write(core.VInt(config.MaximumUpgradeLevel))
 

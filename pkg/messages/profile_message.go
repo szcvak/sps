@@ -3,18 +3,22 @@ package messages
 import (
 	"log/slog"
 	"strconv"
+	"context"
 
 	"github.com/szcvak/sps/pkg/core"
+	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/csv"
 )
 
 type ProfileMessage struct {
 	player *core.Player
+	dbm *database.Manager
 }
 
-func NewProfileMessage(player *core.Player) *ProfileMessage {
+func NewProfileMessage(player *core.Player, dbm *database.Manager) *ProfileMessage {
 	return &ProfileMessage{
 		player: player,
+		dbm: dbm,
 	}
 }
 
@@ -110,20 +114,36 @@ func (p *ProfileMessage) Marshal() []byte {
 	// end
 
 	// alliance
-
-	stream.Write(true)             // is in alliance
-	stream.Write(0)                // high id
-	stream.Write(1)                // low id
-	stream.Write("The best")       // Name
-	stream.Write(core.ScId{8, 19}) // icon
-
-	stream.Write(core.VInt(1)) // type
-	stream.Write(core.VInt(1)) // members
-	stream.Write(core.VInt(0)) // trophies
-	stream.Write(core.VInt(0)) // required trophies
-
-	stream.Write(core.ScId{14, 249}) // unknown
-	stream.Write(core.ScId{25, 2})   // unknown
+	
+	if p.player.AllianceId == nil {
+		stream.Write(false)
+		stream.Write(core.VInt(0))
+	} else {
+		stream.WriteBool(true)
+		
+		a, err := p.dbm.LoadAlliance(context.Background(), *p.player.AllianceId)
+		
+		if err != nil {
+			slog.Error("failed to load alliance!", "err", err)
+			return stream.Buffer()
+		}
+		
+		stream.Write(0)
+		stream.Write(int32(a.Id))
+		
+		stream.Write(a.Name)
+		stream.Write(core.ScId{8, a.BadgeId})
+	
+		stream.Write(core.VInt(a.Type))
+		stream.Write(core.VInt(a.TotalMembers))
+		stream.Write(core.VInt(a.TotalTrophies))
+		stream.Write(core.VInt(a.RequiredTrophies))
+	
+		stream.Write(core.ScId{14, 249}) // unknown
+		stream.Write(core.ScId{25, 2})   // unknown
+		
+		stream.Write(core.VInt(p.player.AllianceRole))
+	}
 
 	return stream.Buffer()
 }

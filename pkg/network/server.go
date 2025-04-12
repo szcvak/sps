@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
+	"github.com/szcvak/sps/pkg/hub"
 	"io"
 	"log/slog"
 	"net"
@@ -18,6 +19,8 @@ type Server struct {
 	dbm *database.Manager
 
 	totalClients atomic.Int64
+	
+	closed bool
 }
 
 func NewServer(address string, dbm *database.Manager) *Server {
@@ -52,6 +55,10 @@ func (s *Server) accept() {
 		conn, err := s.ln.Accept()
 
 		if err != nil {
+			if s.closed {
+				return
+			}
+			
 			slog.Error("failed to accept client!", "err", err)
 			continue
 		}
@@ -69,6 +76,9 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 	defer func() {
 		s.totalClients.Add(-1)
 		slog.Info("client disconnected", "total", s.totalClients.Load())
+		
+		hub.GetHub().RemoveClient(wrapper)
+		
 		wrapper.Close()
 	}()
 
@@ -114,4 +124,9 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 		msg.Unmarshal(payload)
 		msg.Process(wrapper, s.dbm)
 	}
+}
+
+func (s *Server) Close() {
+	close(s.quitch)
+	s.closed = true
 }

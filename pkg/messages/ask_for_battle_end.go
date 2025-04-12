@@ -73,28 +73,57 @@ func (a *AskForBattleEndMessage) Unmarshal(data []byte) {
 }
 
 func (a *AskForBattleEndMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
-	for card, amt := range wrapper.Player.Brawlers[a.data.Brawlers[0].CharacterId.S].Cards {
-		id, err := strconv.Atoi(card)
-
-		if err != nil {
-			slog.Error("failed to convert brawler id to int")
-			continue
-		}
-
-		if !csv.IsCardUnlocked(id) {
-			a.data.Brawlers[0].PowerLevel += amt
+	player := wrapper.Player
+	charId := int32(-1)
+	
+	playerIndex := -1
+	
+	for i, entry := range a.data.Brawlers {
+		if entry.IsPlayer {
+			charId = entry.CharacterId.S
+			playerIndex = i
+			
+			break
 		}
 	}
 
-	a.data.IsRealGame = wrapper.Player.TutorialState != 1
-	a.data.IsTutorial = wrapper.Player.TutorialState == 1
+	if playerIndex == -1 {
+		slog.Error("failed to find self in battle end data!", "playerId", player.DbId)
+		return
+	}
+
+	if brawlerData, ok := player.Brawlers[charId]; ok {
+		powerLevel := int32(0)
+		
+		for cardStr, amt := range brawlerData.Cards {
+			id, err := strconv.Atoi(cardStr)
+			
+			if err != nil {
+				slog.Error("failed to convert card str!", "card", cardStr, "playerId", player.DbId)
+				continue
+			}
+			
+			if !csv.IsCardUnlocked(id) {
+				powerLevel += amt
+			}
+		}
+		
+		a.data.Brawlers[playerIndex].PowerLevel = powerLevel
+	} else {
+		slog.Warn("player data for brawler not found", "playerId", player.DbId, "charId", charId)
+		a.data.Brawlers[playerIndex].PowerLevel = 1
+	}
+
+
+	a.data.IsRealGame = player.TutorialState != 1
+	a.data.IsTutorial = !a.data.IsRealGame
 
 	if a.data.BattleRank != 0 {
-		msg := NewBattleEndSdMessage(a.data, wrapper.Player, dbm)
+		msg := NewBattleEndSdMessage(a.data, player, dbm)
 		wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 	} else {
-		msg := NewBattleEndTrioMessage(a.data, wrapper.Player, dbm)
-		wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
+		// msg := NewBattleEndTrioMessage(a.data, player, dbm)
+		// wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 	}
 }
 

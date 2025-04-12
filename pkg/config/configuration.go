@@ -41,19 +41,19 @@ var (
 	}
 
 	DefaultCurrencyBalance = map[int32]int32{
-		CurrencyCoins:  10_000,
-		CurrencyGems:   500,
+		CurrencyCoins:  1000,
+		CurrencyGems:   1000,
 		CurrencyBling:  5000,
-		CurrencyChips:  300,
-		CurrencyElixir: 1000,
+		CurrencyChips:  0,
+		CurrencyElixir: 0,
 	}
 
 	BoxRewardRarityChooser, _ = weightedrand.NewChooser(
-		weightedrand.NewChoice(0, 99),
-		weightedrand.NewChoice(1, 1),
-		/*weightedrand.NewChoice(2, 15),
+		weightedrand.NewChoice(0, 25),
+		weightedrand.NewChoice(1, 20),
+		weightedrand.NewChoice(2, 15),
 		weightedrand.NewChoice(3, 12),
 		weightedrand.NewChoice(4, 8),
-		weightedrand.NewChoice(5, 5),*/
+		weightedrand.NewChoice(5, 5),
 	)
 )

@@ -52,6 +52,7 @@ type Player struct {
 	TutorialState int32 `db:"tutorial_state"`
 
 	CoinBooster int32 `db:"coin_booster"`
+	CoinDoubler int32 `db:"coin_doubler"`
 	CoinsReward int32 `db:"coins_reward"`
 	Experience  int32 `db:"experience"`
 
@@ -60,6 +61,9 @@ type Player struct {
 
 	Brawlers map[int32]*PlayerBrawler
 	Wallet   map[int32]*PlayerCurrency
+	
+	AllianceId   *int64 `db:"alliance_id"`
+	AllianceRole int16  `db:"alliance_role"`
 
 	state PlayerState
 }

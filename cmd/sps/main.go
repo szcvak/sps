@@ -1,8 +1,13 @@
 package main
 
 import (
+	"os"
+	"syscall"
 	"log/slog"
+	"os/signal"
 
+	"github.com/szcvak/sps/pkg/hub"
+	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/csv"
 	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/network"
@@ -11,7 +16,11 @@ import (
 func main() {
 	if err := csv.LoadAll(); err != nil {
 		slog.Error("failed to load cards!", "err", err)
+		return
 	}
+	
+	core.InitEventManager(core.DefaultSchedules())
+	hub.InitHub()
 
 	dbm, err := database.NewManager()
 
@@ -30,9 +39,23 @@ func main() {
 	}
 
 	server := network.NewServer("0.0.0.0:9339", dbm)
-	err = server.Serve()
+	errChan := make(chan error, 1)
+	
+	go func() {
+		errChan <- server.Serve()
+	}()
+	
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	
+	select {
+	case _ = <-stop:
+		server.Close()
+	case err := <-errChan:
+		slog.Error("faled to serve!", "err", err)
+	}
 
-	if err != nil {
-		slog.Error("failed to start serving!", "err", err)
+	if em := core.GetEventManager(); em != nil {
+		em.Close()
 	}
 }

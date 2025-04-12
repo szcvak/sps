@@ -30,13 +30,13 @@ func (a *AskProfileMessage) Process(wrapper *core.ClientWrapper, dbm *database.M
 		return
 	}
 
-	player, err := dbm.LoadPlayerByIds(context.Background(), a.highId, a.lowId)
+	target, err := dbm.LoadPlayerByIds(context.Background(), a.highId, a.lowId)
 
 	if err != nil {
 		slog.Error("failed to find player by ids!", "err", err)
 		return
 	}
 
-	msg := NewProfileMessage(player)
+	msg := NewProfileMessage(target, dbm)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 }

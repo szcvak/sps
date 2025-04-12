@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/szcvak/sps/pkg/hub"
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/messaging"
@@ -69,7 +70,7 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 	if !l.Unmarshalled() {
 		return
 	}
-
+	
 	player, err := dbm.LoadPlayerByToken(context.Background(), l.Token)
 	isNew := false
 
@@ -110,6 +111,8 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 
 	player.SetState(core.StateLogin)
 	wrapper.Player = player
+	
+	hub.GetHub().AddClient(wrapper)
 
 	msg := NewLoginOkMessage(l)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
@@ -117,9 +120,9 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 	msg2 := NewOwnHomeDataMessage(wrapper, dbm)
 	wrapper.Send(msg2.PacketId(), msg2.PacketVersion(), msg2.Marshal())
 
-	msg3 := NewClanStreamMessage()
+	msg3 := NewClanStreamMessage(wrapper, dbm)
 	wrapper.Send(msg3.PacketId(), msg3.PacketVersion(), msg3.Marshal())
 
-	msg4 := NewMyAllianceMessage()
+	msg4 := NewMyAllianceMessage(wrapper, dbm)
 	wrapper.Send(msg4.PacketId(), msg4.PacketVersion(), msg4.Marshal())
 }

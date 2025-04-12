@@ -1,0 +1,88 @@
+package messages
+
+import (
+	"time"
+
+	"github.com/szcvak/sps/pkg/core"
+)
+
+type AllianceChatServerMessage struct {
+	allianceId int64
+	msg core.AllianceMessage
+}
+
+func NewAllianceChatServerMessage(msg core.AllianceMessage, allianceId int64) *AllianceChatServerMessage {
+	return &AllianceChatServerMessage{
+		allianceId: allianceId,
+		msg: msg,
+	}
+}
+
+func (a *AllianceChatServerMessage) PacketId() uint16 {
+	return 24312
+}
+
+func (a *AllianceChatServerMessage) PacketVersion() uint16 {
+	return 1
+}
+
+func (a *AllianceChatServerMessage) Marshal() []byte {
+	stream := core.NewByteStreamWithCapacity(64)
+	
+	stream.Write(core.VInt(a.msg.Type))
+	dispatchEntry(stream, a.msg)
+	
+	return stream.Buffer()
+}
+
+// --- Stream functions --- //
+
+func dispatchEntry(stream *core.ByteStream, msg core.AllianceMessage) {
+	switch msg.Type {
+	case 2:
+		chatStreamEntry(stream, msg)
+	case 3:
+		allianceEventStreamEntry(stream, msg)
+	}
+}
+
+func embedStreamEntry(stream *core.ByteStream, msg core.AllianceMessage) {
+	stream.Write(core.LogicLong{0, int32(msg.Id)})
+
+	senderHighId := int32(0)
+	senderLowId := int32(0)
+	
+	if msg.PlayerId != nil {
+		senderHighId = msg.PlayerHighId
+		senderLowId = msg.PlayerLowId
+	}
+	
+	stream.Write(core.LogicLong{senderHighId, senderLowId})
+
+	stream.Write(msg.PlayerName)
+	stream.Write(core.VInt(msg.PlayerRole))
+
+	ageSeconds := int32(time.Since(msg.Timestamp).Seconds())
+	
+	if ageSeconds < 0 {
+		ageSeconds = 0
+	}
+	
+	stream.Write(core.VInt(ageSeconds))
+	stream.Write(false)
+}
+
+func chatStreamEntry(stream *core.ByteStream, msg core.AllianceMessage) {
+	embedStreamEntry(stream, msg)
+	stream.Write(msg.Content)
+}
+
+func allianceEventStreamEntry(stream *core.ByteStream, msg core.AllianceMessage) {
+	embedStreamEntry(stream, msg)
+	
+	stream.Write(core.VInt(3))
+	stream.Write(true)
+	stream.Write(core.LogicLong{0, int32(*msg.TargetId)})
+	stream.Write(msg.PlayerName)
+}
+

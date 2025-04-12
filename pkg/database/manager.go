@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"encoding/json"
+	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
@@ -65,6 +66,9 @@ func (m *Manager) CreateDefault() error {
 		{"player unlocked star gadgets table", playerUnlockedGadgets},
 		{"player unlocked star gears table", playerUnlockedGears},
 		{"player wallet table", playerWallet},
+		{"alliances", alliances},
+		{"alliance members", allianceMembers},
+		{"alliance messages", allianceMessages},
 	}
 
 	for _, entry := range ddlStatements {
@@ -231,7 +235,7 @@ func (m *Manager) CreatePlayer(ctx context.Context, highId int32, lowId int32, n
 	return player, nil
 }
 
-func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Player, error) {
+func (m *Manager) LoadPlayerByIds(ctx context.Context, high int32, low int32) (*core.Player, error) {
 	conn, err := m.pool.Acquire(ctx)
 
 	if err != nil {
@@ -241,27 +245,45 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 	defer conn.Release()
 
 	player := core.NewPlayer()
+	
+	var allianceId sql.NullInt64
+	var allianceRole sql.NullInt16
 
 	// core/progression
 	stmt := `
 		select
-			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward,
-			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories, pp.experience
+			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward, p.coin_doubler,
+			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories, pp.experience,
+			am.alliance_id, am.role
 		from players p
-		join player_progression pp ON p.id = pp.player_id
-		where p.token = $1`
+		join player_progression pp on p.id = pp.player_id
+		left join alliance_members am on p.id = am.player_id
+		where p.high_id = $1 and p.low_id = $2`
 
-	err = conn.QueryRow(ctx, stmt, token).Scan(
-		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward,
+	err = conn.QueryRow(ctx, stmt, high, low).Scan(
+		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward, &player.CoinDoubler,
 		&player.Trophies, &player.HighestTrophies, &player.SoloVictories, &player.DuoVictories, &player.TrioVictories, &player.Experience,
+		&allianceId, &allianceRole,
 	)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("%w for player with token %s", ErrPlayerNotFound, token)
+			return nil, fmt.Errorf("%w", ErrPlayerNotFound)
 		}
 
-		return nil, fmt.Errorf("failed to query core/progression data for player with token %s: %w", token, err)
+		return nil, fmt.Errorf("failed to query core/progression data: %w", err)
+	}
+	
+	if allianceId.Valid {
+		player.AllianceId = &allianceId.Int64
+	} else {
+		player.AllianceId = nil
+	}
+	
+	if allianceRole.Valid {
+		player.AllianceRole = allianceRole.Int16
+	} else {
+		player.AllianceRole = 0
 	}
 
 	playerId := player.DbId
@@ -335,7 +357,7 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 	return player, nil
 }
 
-func (m *Manager) LoadPlayerByIds(ctx context.Context, highId int32, lowId int32) (*core.Player, error) {
+func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Player, error) {
 	conn, err := m.pool.Acquire(ctx)
 
 	if err != nil {
@@ -345,27 +367,45 @@ func (m *Manager) LoadPlayerByIds(ctx context.Context, highId int32, lowId int32
 	defer conn.Release()
 
 	player := core.NewPlayer()
+	
+	var allianceId sql.NullInt64
+	var allianceRole sql.NullInt16
 
 	// core/progression
 	stmt := `
 		select
-			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward,
-			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories, pp.experience
+			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward, p.coin_doubler,
+			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories, pp.experience,
+			am.alliance_id, am.role
 		from players p
-		join player_progression pp ON p.id = pp.player_id
-		where p.high_id = $1 and p.low_id = $2`
+		join player_progression pp on p.id = pp.player_id
+		left join alliance_members am on p.id = am.player_id
+		where p.token = $1`
 
-	err = conn.QueryRow(ctx, stmt, highId, lowId).Scan(
-		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward,
+	err = conn.QueryRow(ctx, stmt, token).Scan(
+		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward, &player.CoinDoubler,
 		&player.Trophies, &player.HighestTrophies, &player.SoloVictories, &player.DuoVictories, &player.TrioVictories, &player.Experience,
+		&allianceId, &allianceRole,
 	)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("%w for player with ids %d, %d", ErrPlayerNotFound, highId, lowId)
+			return nil, fmt.Errorf("%w for player with token %s", ErrPlayerNotFound, token)
 		}
 
-		return nil, fmt.Errorf("failed to query core/progression data for player with ids %d, %d: %w", highId, lowId, err)
+		return nil, fmt.Errorf("failed to query core/progression data for player with token %s: %w", token, err)
+	}
+	
+	if allianceId.Valid {
+		player.AllianceId = &allianceId.Int64
+	} else {
+		player.AllianceId = nil
+	}
+	
+	if allianceRole.Valid {
+		player.AllianceRole = allianceRole.Int16
+	} else {
+		player.AllianceRole = 0
 	}
 
 	playerId := player.DbId
@@ -445,4 +485,381 @@ func (m *Manager) Exec(query string, args ...interface{}) error {
 
 	_, err := m.Pool().Exec(ctx, query, args...)
 	return err
+}
+
+func (m *Manager) LoadAlliance(ctx context.Context, allianceId int64) (*core.Alliance, error) {
+	conn, err := m.pool.Acquire(ctx)
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire connection: %w", err)
+	}
+	
+	defer conn.Release()
+
+	a := core.NewAlliance(allianceId)
+
+	stmt := `
+        select
+            name, description, badge_id, type, required_trophies,
+            total_trophies, creator_id
+        from alliances
+        where id = $1`
+
+	var creatorId sql.NullInt64
+
+	err = conn.QueryRow(ctx, stmt, allianceId).Scan(
+		&a.Name, &a.Description, &a.BadgeId, &a.Type, &a.RequiredTrophies,
+		&a.TotalTrophies, &creatorId,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query alliance core data for id %d: %w", allianceId, err)
+	}
+
+	if creatorId.Valid {
+		a.CreatorId = &creatorId.Int64
+	}
+
+	stmt = `
+        select
+            am.player_id, am.role,
+			p.name, p.low_id, p.profile_icon,
+			pp.experience, pp.trophies
+        from alliance_members am
+		join players p on am.player_id = p.id
+		join player_progression pp on p.id = pp.player_id
+        where am.alliance_id = $1
+		order by am.role desc, pp.trophies desc`
+
+	rows, err := conn.Query(ctx, stmt, allianceId)
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	defer rows.Close()
+
+	a.Members = make([]core.AllianceMember, 0)
+
+	for rows.Next() {
+		member := core.AllianceMember{}
+
+		err = rows.Scan(
+			&member.PlayerId,
+			&member.Role,
+			&member.Name,
+			&member.LowId,
+			&member.ProfileIcon,
+			&member.Experience,
+			&member.Trophies,
+		)
+
+		if err != nil {
+			slog.Error("failed to scan alliance member row, skipping", "allianceId", allianceId, "err", err)
+			continue
+		}
+
+		a.Members = append(a.Members, member)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	
+	a.TotalMembers = int32(len(a.Members))
+
+	return a, nil
+}
+
+func (m *Manager) GetAlliances(ctx context.Context) ([]*core.Alliance, error) {
+	conn, err := m.pool.Acquire(ctx)
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire connection for getting alliances: %w", err)
+	}
+	
+	defer conn.Release()
+
+	stmt := `
+		select
+			a.id, a.name, a.description, a.badge_id, a.type,
+			a.required_trophies, a.total_trophies,
+			a.creator_id,
+			coalesce(mc.member_count, 0) as current_member_count
+		from alliances a
+		left join (
+			select alliance_id, count(*) as member_count
+			from alliance_members
+			group by alliance_id
+		) mc on a.id = mc.alliance_id
+		order by a.total_trophies desc, a.name asc`
+
+	rows, err := conn.Query(ctx, stmt)
+	
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return []*core.Alliance{}, nil
+		}
+		
+		return nil, fmt.Errorf("failed to query alliances with counts: %w", err)
+	}
+	
+	defer rows.Close()
+
+	alliancesList := make([]*core.Alliance, 0)
+
+	for rows.Next() {
+		a := core.NewAlliance(0)
+		
+		var creatorId sql.NullInt64
+		var memberCount int32
+
+		err := rows.Scan(
+			&a.Id,
+			&a.Name,
+			&a.Description,
+			&a.BadgeId,
+			&a.Type,
+			&a.RequiredTrophies,
+			&a.TotalTrophies,
+			&creatorId,
+			&memberCount,
+		)
+
+		if err != nil {
+			slog.Error("failed to scan alliance row with count, skipping", "err", err)
+			continue
+		}
+
+		if creatorId.Valid {
+			a.CreatorId = &creatorId.Int64
+		} else {
+			a.CreatorId = nil
+		}
+		
+		a.TotalMembers = memberCount
+		a.Members = make([]core.AllianceMember, 0)
+		
+		alliancesList = append(alliancesList, a)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating alliance rows with count: %w", err)
+	}
+
+	return alliancesList, nil
+}
+
+func (m *Manager) LoadAllianceMessages(ctx context.Context, allianceId int64, limit int) ([]core.AllianceMessage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	conn, err := m.pool.Acquire(ctx)
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire connection: %w", err)
+	}
+	
+	defer conn.Release()
+
+	stmt := `
+        select
+            id, alliance_id, player_id,
+            player_high_id, player_low_id, player_name, player_role,
+            player_icon,
+            message_type, message_content,
+            target_id, target_name,
+            created_at
+        from alliance_messages
+        where alliance_id = $1
+        order by created_at desc
+        limit $2`
+
+	rows, err := conn.Query(ctx, stmt, allianceId, limit)
+	
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return []core.AllianceMessage{}, nil
+		}
+		
+		return nil, fmt.Errorf("failed to query alliance messages for id %d: %w", allianceId, err)
+	}
+	
+	defer rows.Close()
+
+	messages := make([]core.AllianceMessage, 0, limit)
+
+	for rows.Next() {
+		var msg core.AllianceMessage
+
+		var dbPlayerId sql.NullInt64
+		var dbContent sql.NullString
+		var dbTargetId sql.NullInt64
+		var dbTargetName sql.NullString
+
+		err := rows.Scan(
+			&msg.Id, &msg.AllianceId, &dbPlayerId,
+			&msg.PlayerHighId, &msg.PlayerLowId, &msg.PlayerName, &msg.PlayerRole,
+			&msg.PlayerIcon,
+			&msg.Type, &dbContent,
+			&dbTargetId, &dbTargetName,
+			&msg.Timestamp,
+		)
+		
+		if err != nil {
+			slog.Error("failed to scan alliance message row, skipping", "allianceId", allianceId, "err", err)
+			continue
+		}
+
+		if dbPlayerId.Valid {
+			msg.PlayerId = &dbPlayerId.Int64
+		}
+		
+		if dbContent.Valid {
+			msg.Content = dbContent.String
+		}
+		
+		if dbTargetId.Valid {
+			msg.TargetId = &dbTargetId.Int64
+		}
+		
+		if dbTargetName.Valid {
+			msg.TargetName = dbTargetName.String
+		}
+
+		messages = append(messages, msg)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating alliance message rows for id %d: %w", allianceId, err)
+	}
+
+	reverseMessages(messages)
+	
+	return messages, nil
+}
+
+func (m *Manager) AddAllianceMessage(ctx context.Context, allianceId int64, sender *core.Player, msgType int16, content string, targetPlayer *core.Player) (*core.AllianceMessage, error) {
+	conn, err := m.pool.Acquire(ctx)
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire connection: %w", err)
+	}
+	
+	defer conn.Release()
+
+	var dbPlayerId sql.NullInt64
+	var dbPlayerHighId sql.NullInt32
+	var dbPlayerLowId sql.NullInt32
+	var dbPlayerName sql.NullString
+	var dbPlayerRole sql.NullInt16
+	var dbPlayerIcon sql.NullInt32
+
+	if sender != nil {
+		dbPlayerId.Valid = true
+		dbPlayerId.Int64 = sender.DbId
+		
+		dbPlayerHighId.Valid = true
+		dbPlayerHighId.Int32 = sender.HighId
+		
+		dbPlayerLowId.Valid = true
+		dbPlayerLowId.Int32 = sender.LowId
+		
+		dbPlayerName.Valid = true
+		dbPlayerName.String = sender.Name
+		
+		dbPlayerRole.Valid = true
+		dbPlayerRole.Int16 = sender.AllianceRole
+		
+		dbPlayerIcon.Valid = true
+		dbPlayerIcon.Int32 = sender.ProfileIcon
+	}
+
+	var dbContent sql.NullString
+	
+	if content != "" {
+		dbContent.Valid = true
+		dbContent.String = content
+	}
+
+	var dbTargetId sql.NullInt64
+	var dbTargetName sql.NullString
+	
+	if targetPlayer != nil {
+		dbTargetId.Valid = true
+		dbTargetId.Int64 = targetPlayer.DbId
+		
+		dbTargetName.Valid = true
+		dbTargetName.String = targetPlayer.Name
+	}
+	
+	stmt := `
+        insert into alliance_messages (
+            alliance_id, player_id,
+            player_high_id, player_low_id, player_name, player_role,
+            player_icon,
+            message_type, message_content,
+            target_id, target_name
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        returning id, created_at`
+
+	var newMessageId int64
+	var newMessageTimestamp time.Time
+
+	err = conn.QueryRow(ctx, stmt,
+		allianceId,
+		dbPlayerId,
+		dbPlayerHighId,
+		dbPlayerLowId,
+		dbPlayerName,
+		dbPlayerRole,
+		dbPlayerIcon,
+		msgType,
+		dbContent,
+		dbTargetId,
+		dbTargetName,
+	).Scan(&newMessageId, &newMessageTimestamp)
+
+	if err != nil {
+		senderId := int64(0)
+		
+		if sender != nil {
+			senderId = sender.DbId
+		}
+		
+		slog.Error("failed to insert alliance message!", "allianceId", allianceId, "senderId", senderId, "type", msgType, "err", err)
+		
+		return nil, fmt.Errorf("failed to insert alliance message: %w", err)
+	}
+
+	persistedMsg := &core.AllianceMessage{
+		Id:           newMessageId,
+		AllianceId:   allianceId,
+		Type:         msgType,
+		Content:      dbContent.String,
+		Timestamp:    newMessageTimestamp,
+	}
+
+	if dbPlayerId.Valid {
+		persistedMsg.PlayerId = &dbPlayerId.Int64
+		persistedMsg.PlayerHighId = dbPlayerHighId.Int32
+		persistedMsg.PlayerLowId = dbPlayerLowId.Int32
+		persistedMsg.PlayerName = dbPlayerName.String
+		persistedMsg.PlayerRole = dbPlayerRole.Int16
+		persistedMsg.PlayerIcon = dbPlayerIcon.Int32
+	}
+	
+	if dbTargetId.Valid {
+		persistedMsg.TargetId = &dbTargetId.Int64
+		persistedMsg.TargetName = dbTargetName.String
+	}
+
+	return persistedMsg, nil
+}
+
+func reverseMessages(s []core.AllianceMessage) {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
 }

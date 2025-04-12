@@ -3,6 +3,7 @@ package messages
 import (
 	"github.com/szcvak/sps/pkg/config"
 	"github.com/szcvak/sps/pkg/core"
+	"github.com/szcvak/sps/pkg/csv"
 	"github.com/szcvak/sps/pkg/database"
 	"log/slog"
 	"math"
@@ -32,64 +33,126 @@ func (b *BattleEndSdMessage) PacketVersion() uint16 {
 }
 
 func (b *BattleEndSdMessage) Marshal() []byte {
-	stream := core.NewByteStreamWithCapacity(32)
+	stream := core.NewByteStreamWithCapacity(256)
+
+	player := b.player
+	data := b.data
+
+	playerIndex := -1
+	charId := int32(-1)
+	
+	for i, entry := range data.Brawlers {
+		if entry.IsPlayer {
+			playerIndex = i
+			charId = entry.CharacterId.S
+			
+			break
+		}
+	}
+
+	var playerBrawler *core.PlayerBrawler
+	
+	if playerIndex != -1 {
+		if pbData, ok := player.Brawlers[charId]; ok {
+			playerBrawler = pbData
+		}
+	}
+
+	if playerBrawler == nil {
+		slog.Error("failed to find player brawler data", "playerId", player.DbId, "charId", charId)
+		playerBrawler = &core.PlayerBrawler{Trophies: 0, HighestTrophies: 0}
+	}
+
 
 	var (
-		trophies      int32
-		coins         int32
-		exp           int32
-		starPlayerExp int32
-		boostedCoins  int32
+		trophies      int32 = 0
+		coins         int32 = 0
+		exp           int32 = 0
+		starPlayerExp int32 = 0
+		boostedCoins  int32 = 0
+		doubledCoins  int32 = 0
 	)
 
-	if !b.data.IsRealGame {
-		trophies = 0
-		coins = 0
-		exp = 0
-		starPlayerExp = 0
-		boostedCoins = 0
-	} else {
-		trophies = getSdBattleEndTrophies(int32(b.data.BattleRank), b.player.Brawlers[b.data.Brawlers[0].CharacterId.S].Trophies)
-		coins = getSdBattleEndCoins(int32(b.data.BattleRank))
-		exp = getSdBattleEndExp(int32(b.data.BattleRank))
+	if data.IsRealGame {
+		trophies = getSdBattleEndTrophies(int32(data.BattleRank), playerBrawler.Trophies)
+		coins = getSdBattleEndCoins(int32(data.BattleRank))
+		exp = getSdBattleEndExp(int32(data.BattleRank))
 
-		starPlayerExp = 10
-		boostedCoins = 0
+		if playerIndex != -1 && data.Brawlers[playerIndex].IsPlayer {
+			starPlayerExp = 10
+		}
+
+		doubledCoins = coins
+		
+		if coins > player.CoinDoubler {
+			doubledCoins = player.CoinDoubler
+		}
 
 		now := time.Now().Unix()
-
-		if int64(b.player.CoinBooster)-now > 0 {
+		
+		if int64(player.CoinBooster)-now > 0 {
 			boostedCoins = coins
 		}
 	}
 
-	stream.Write(core.VInt(5)) // battle end mode, 5=showdown, other=3v3
-	stream.Write(core.VInt(0)) // 1+= "all coins collected"
+	stream.Write(core.VInt(5)) // 5 = showdown
+	stream.Write(core.VInt(0))
 	stream.Write(core.VInt(coins))
 	stream.Write(core.VInt(6969))
 	stream.Write(core.VInt(0))
 	stream.Write(false)
-	stream.Write(b.data.BattleRank)
+	stream.Write(data.BattleRank)
 
 	stream.Write(core.VInt(trophies))
-	stream.Write(core.ScId{28, b.player.ProfileIcon})
-	stream.Write(b.data.IsTutorial)
-	stream.Write(b.data.IsRealGame)
-	stream.Write(core.VInt(50)) // coin booster %
+	stream.Write(core.ScId{28, player.ProfileIcon})
+	stream.Write(data.IsTutorial)
+	stream.Write(data.IsRealGame)
+	stream.Write(core.VInt(50))
 	stream.Write(core.VInt(boostedCoins))
-	stream.Write(0) // coins doubled
+	stream.Write(core.VInt(doubledCoins))
 
-	stream.Write(b.data.PlayersAmount)
+	stream.Write(core.VInt(data.PlayersAmount))
 
-	for _, player := range b.data.Brawlers {
-		stream.Write(player.Name)
-		stream.Write(player.IsPlayer)
-		stream.Write(player.Team != b.data.Brawlers[0].Team)
-		stream.Write(player.IsPlayer) // star player
-		stream.Write(core.ScId{player.CharacterId.F, player.CharacterId.S})
-		stream.Write(core.ScId{player.SkinId.F, player.SkinId.S})
-		stream.Write(core.VInt(0)) // brawler trophies
-		stream.Write(core.VInt(player.PowerLevel - 1))
+	for _, pData := range data.Brawlers {
+		stream.Write(pData.Name)
+		stream.Write(pData.IsPlayer)
+
+		isEnemy := false
+		
+		if playerIndex != -1 && pData.Team != data.Brawlers[playerIndex].Team {
+			isEnemy = true
+		}
+		
+		stream.Write(isEnemy)
+
+		isStarPlayer := pData.IsPlayer
+		
+		stream.Write(isStarPlayer)
+
+		charId := pData.CharacterId.S
+		cardId, found := csv.GetCardForCharacter(charId)
+		
+		if !found {
+			slog.Warn("failed to find card id", "charId", charId)
+			stream.Write(core.ScId{16, 0})
+		} else {
+			stream.Write(core.ScId{16, cardId})
+		}
+
+		stream.Write(core.ScId{pData.SkinId.F, pData.SkinId.S})
+		stream.Write(core.VInt(0))
+
+		powerLevel := int32(0)
+		
+		if pData.IsPlayer {
+			powerLevel = pData.PowerLevel - 1
+			
+			if powerLevel < 0 {
+				powerLevel = 0
+			}
+		}
+		
+		stream.Write(core.VInt(powerLevel))
 	}
 
 	stream.Write(core.VInt(2))
@@ -100,57 +163,63 @@ func (b *BattleEndSdMessage) Marshal() []byte {
 
 	stream.Write(core.VInt(0))
 
-	currentBrawlerTrophies := b.player.Brawlers[b.data.Brawlers[0].CharacterId.S].Trophies
-	currentBrawlerHighest := b.player.Brawlers[b.data.Brawlers[0].CharacterId.S].HighestTrophies
-
 	stream.Write(core.VInt(2))
 	stream.Write(core.VInt(1))
-	stream.Write(core.VInt(currentBrawlerTrophies))
-	stream.Write(core.VInt(currentBrawlerHighest))
+	stream.Write(core.VInt(playerBrawler.Trophies))
+	stream.Write(core.VInt(playerBrawler.HighestTrophies))
 	stream.Write(core.VInt(5))
-	stream.Write(core.VInt(b.player.Experience))
-	stream.Write(core.VInt(b.player.Experience))
+	stream.Write(core.VInt(player.Experience))
+	stream.Write(core.VInt(player.Experience))
 
 	stream.Write(true)
-
 	core.EmbedMilestones(stream)
 
-	b.player.Trophies += trophies
-	b.player.Experience += exp
-	b.player.Wallet[config.CurrencyCoins].Balance += int64(coins + boostedCoins) /* coins doubled */
-	b.player.CoinsReward += coins + boostedCoins
-	b.player.Brawlers[b.data.Brawlers[0].CharacterId.S].Trophies += trophies
-	b.player.Brawlers[b.data.Brawlers[0].CharacterId.S].HighestTrophies = max(b.player.Brawlers[b.data.Brawlers[0].CharacterId.S].Trophies, b.player.Brawlers[b.data.Brawlers[0].CharacterId.S].HighestTrophies)
+	if data.IsRealGame {
+		player.Trophies += trophies
+		player.HighestTrophies = max(player.Trophies, player.HighestTrophies)
+		player.Experience += (exp + starPlayerExp)
+		
+		if walletCoin, ok := player.Wallet[config.CurrencyCoins]; ok {
+			walletCoin.Balance += int64(coins + boostedCoins + doubledCoins)
+		}
+		
+		player.CoinsReward = coins + boostedCoins + doubledCoins
 
-	brawler := b.player.Brawlers[b.data.Brawlers[0].CharacterId.S]
+		if charId != -1 {
+			playerBrawler.Trophies += trophies
+			playerBrawler.HighestTrophies = max(playerBrawler.Trophies, playerBrawler.HighestTrophies)
 
-	logError(
-		b.dbm.Exec(
-			"update player_progression set trophies = $1, highest_trophies = $2, experience = $3 where player_id = $4",
-			b.player.Trophies, b.player.HighestTrophies, b.player.Experience, b.player.DbId,
-		),
-	)
-
-	logError(
-		b.dbm.Exec(
-			"update player_wallet set balance = $1 where player_id = $2 and currency_id = $3",
-			b.player.Wallet[config.CurrencyCoins].Balance, b.player.DbId, config.CurrencyCoins,
-		),
-	)
-
-	logError(
-		b.dbm.Exec(
-			"update player_brawlers set trophies = $1, highest_trophies = $2 where player_id = $3 and brawler_id = $4",
-			brawler.Trophies, brawler.HighestTrophies, b.player.DbId, brawler.BrawlerId,
-		),
-	)
-
-	logError(
-		b.dbm.Exec(
-			"update players set coins_reward = $1 where id = $2",
-			b.player.CoinsReward, b.player.DbId,
-		),
-	)
+			logError(
+				b.dbm.Exec(
+					"UPDATE player_progression SET trophies = $1, highest_trophies = $2, experience = $3 WHERE player_id = $4",
+					player.Trophies, player.HighestTrophies, player.Experience, player.DbId,
+				),
+			)
+			
+			if walletCoin, ok := player.Wallet[config.CurrencyCoins]; ok {
+				logError(
+					b.dbm.Exec(
+						"UPDATE player_wallet SET balance = $1 WHERE player_id = $2 AND currency_id = $3",
+						walletCoin.Balance, player.DbId, config.CurrencyCoins,
+					),
+				)
+			}
+			
+			logError(
+				b.dbm.Exec(
+					"UPDATE player_brawlers SET trophies = $1, highest_trophies = $2 WHERE player_id = $3 AND brawler_id = $4",
+					playerBrawler.Trophies, playerBrawler.HighestTrophies, player.DbId, playerBrawler.BrawlerId,
+				),
+			)
+			
+			logError(
+				b.dbm.Exec(
+					"UPDATE players SET coin_doubler = $1, coins_reward = $2 WHERE id = $3",
+					player.CoinDoubler, player.CoinsReward, player.DbId,
+				),
+			)
+		}
+	}
 
 	return stream.Buffer()
 }
