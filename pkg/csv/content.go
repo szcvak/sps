@@ -276,6 +276,56 @@ func IsCardUnlocked(card int) bool {
 	return false
 }
 
+func GetCardUnlock(card int32) int32 {
+	if cardsCsv == nil {
+		slog.Error("cards.csv has not been loaded yet!")
+		return 0
+	}
+	
+	data := ""
+
+	for line, row := range cardsCsv {
+		if int32(line) != card {
+			continue
+		}
+
+		data = row[3]
+		
+		if row[5] == "unlock" {
+			return int32(line)
+		}
+		
+		break
+	}
+	
+	for line, row := range cardsCsv {
+		if row[3] == data && row[5] == "unlock" {
+			return int32(line)
+		}
+	}
+
+	slog.Error("failed to find card unlock!", "cardId", card)
+	return 0
+}
+
+func GetBrawlerRarity(id int32) string {
+	if cardsCsv == nil {
+		slog.Error("cards.csv has not been loaded yet!")
+		return "common"
+	}
+	
+	rarity := "common"
+	
+	for line, row := range cardsCsv {
+		if int32(line) == id+1 {
+			rarity = row[10]
+			break
+		}
+	}
+	
+	return rarity
+}
+
 func GetBrawlersWithRarity(rarity string) []int32 {
 	if cardsCsv == nil {
 		slog.Error("cards.csv has not been loaded yet!")
