@@ -43,10 +43,11 @@ func init() {
 	}
 
 	// --- Client --- //
+	ClientCommands[500] = func() ClientCommand { return NewClientGatchaCommand() }
 	ClientCommands[504] = func() ClientCommand { return NewClientEventActionCommand() }
 	ClientCommands[506] = func() ClientCommand { return NewClientProfileIconCommand() }
 	ClientCommands[509] = func() ClientCommand { return NewClientSelectControlModeCommand() }
-	ClientCommands[500] = func() ClientCommand { return NewClientGatchaCommand() }
+	ClientCommands[513] = func() ClientCommand { return NewClientSelectBattleHintsCommand() }
 }
 
 // --- Server commands --- //
@@ -93,8 +94,14 @@ type ClientEventActionCommand struct {
 	action    core.VInt
 }
 
+type ClientSelectBattleHintsCommand struct{}
+
 func NewClientSelectControlModeCommand() *ClientSelectControlModeCommand {
 	return &ClientSelectControlModeCommand{}
+}
+
+func NewClientSelectBattleHintsCommand() *ClientSelectBattleHintsCommand {
+	return &ClientSelectBattleHintsCommand{}
 }
 
 func NewClientGatchaCommand() *ClientGatchaCommand {
@@ -237,4 +244,17 @@ func (c *ClientEventActionCommand) Process(wrapper *core.ClientWrapper, dbm *dat
 		slog.Error("failed to update player wallet!", "err", err)
 		return
 	}
+}
+
+// --- Select battle hints --- //
+
+func (c *ClientSelectBattleHintsCommand) UnmarshalStream(stream *core.ByteStream) {}
+
+func (c *ClientSelectBattleHintsCommand) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
+	if err := dbm.Exec("update players set battle_hints = not battle_hints where id = $1", wrapper.Player.DbId); err != nil {
+		slog.Error("failed to update player battle hints!", "err", err)
+		return
+	}
+
+	wrapper.Player.BattleHints = !wrapper.Player.BattleHints
 }
