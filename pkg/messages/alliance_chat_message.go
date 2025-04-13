@@ -4,9 +4,9 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/szcvak/sps/pkg/hub"
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
+	"github.com/szcvak/sps/pkg/hub"
 )
 
 type AllianceChatMessage struct {
@@ -28,18 +28,18 @@ func (a *AllianceChatMessage) Process(wrapper *core.ClientWrapper, dbm *database
 	if wrapper.Player.State() != core.StateLoggedIn {
 		return
 	}
-	
+
 	if wrapper.Player.AllianceId == nil {
 		return
 	}
-	
+
 	message, err := dbm.AddAllianceMessage(context.Background(), *wrapper.Player.AllianceId, wrapper.Player, 2, a.content, nil)
-	
+
 	if err != nil {
 		slog.Error("failed to add alliance message!", "err", err)
 		return
 	}
-	
+
 	msg := NewAllianceChatServerMessage(*message, *wrapper.Player.AllianceId)
 
 	messageHub := hub.GetHub()

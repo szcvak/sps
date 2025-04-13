@@ -6,12 +6,14 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 )
 
 var (
-	cardsCsv     map[int][]string = nil
-	locationsCsv map[int][]string = nil
+	cardsCsv      map[int][]string = nil
+	locationsCsv  map[int][]string = nil
 	charactersCsv map[int][]string = nil
+	thumbnailsCsv map[int][]string = nil
 )
 
 // --- Private methods --- //
@@ -148,6 +150,50 @@ func loadCharacters() error {
 	return nil
 }
 
+func loadThumbnails() error {
+	if thumbnailsCsv != nil {
+		return nil
+	}
+
+	slog.Info("loading player_thumbnails.csv")
+
+	file, err := os.Open("assets/csv_logic/player_thumbnails.csv")
+
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	thumbnailsCsv = make(map[int][]string)
+
+	reader := csv.NewReader(file)
+	line := 0
+
+	for {
+		record, err_ := reader.Read()
+
+		if err_ != nil {
+			if err_ == io.EOF {
+				break
+			} else {
+				return fmt.Errorf("error during reading: %w\n", err_)
+			}
+		}
+
+		if line < 2 {
+			line++
+			continue
+		}
+
+		thumbnailsCsv[line-2] = record
+
+		line++
+	}
+
+	return nil
+}
+
 // --- Public methods --- //
 
 func CardIds() []int {
@@ -207,16 +253,16 @@ func GetBrawlerId(card int32) int32 {
 		slog.Error("cards.csv has not been loaded yet!")
 		return -1
 	}
-	
+
 	brawler := ""
-	
+
 	for line, row := range cardsCsv {
 		if int32(line) == card {
 			brawler = row[3]
 			break
 		}
 	}
-	
+
 	return GetCharacterIdByName(brawler)
 }
 
@@ -257,13 +303,13 @@ func GetCharacterIdByName(name string) int32 {
 		slog.Error("characters.csv has not been loaded yet!")
 		return 0
 	}
-	
+
 	for line, row := range charactersCsv {
 		if row[0] == name {
 			return int32(line)
 		}
 	}
-	
+
 	slog.Error("failed to find character!", "name", name, "err", "not found in file")
 	return 0
 }
@@ -276,12 +322,12 @@ func GetCardForCharacter(charId int32) (int32, bool) {
 
 	charName := ""
 	charRow, charFound := charactersCsv[int(charId)]
-	
+
 	if !charFound || len(charRow) == 0 {
 		slog.Warn("character id not found in characters.csv", "charId", charId)
 		return -1, false
 	}
-	
+
 	charName = charRow[0]
 
 	if charName == "" {
@@ -298,4 +344,81 @@ func GetCardForCharacter(charId int32) (int32, bool) {
 	slog.Warn("no card found for character", "charId", charId, "charName", charName)
 
 	return -1, false
+}
+
+func GetTrophiesForThumbnail(id int32) int32 {
+	if thumbnailsCsv == nil {
+		slog.Error("player_thumbnails.csv has not been loaded yet!")
+		return 0
+	}
+
+	for line, row := range thumbnailsCsv {
+		if int32(line) == id {
+			amount, err := strconv.Atoi(row[2])
+
+			if err != nil {
+				slog.Error("failed to convert trophies thumbnail to int!", "err", err)
+				return 0
+			}
+
+			return int32(amount)
+		}
+	}
+
+	slog.Error("failed to find trophies for thumbnail!", "id", id, "err", "not found in file")
+	return 0
+}
+
+func GetBrawlerForThumbnail(id int32) string {
+	if thumbnailsCsv == nil {
+		slog.Error("player_thumbnails.csv has not been loaded yet!")
+		return ""
+	}
+
+	for line, row := range thumbnailsCsv {
+		if int32(line) == id {
+			return row[4]
+		}
+	}
+
+	slog.Error("failed to find brawler for thumbnail!", "id", id, "err", "not found in file")
+	return ""
+}
+
+func GetExperienceLevelForThumbnail(id int32) int32 {
+	if thumbnailsCsv == nil {
+		slog.Error("player_thumbnails.csv has not been loaded yet!")
+		return 0
+	}
+
+	for line, row := range thumbnailsCsv {
+		if int32(line) == id {
+			amount, err := strconv.Atoi(row[1])
+
+			if err != nil {
+				slog.Error("failed to convert thumbnail experience to int!", "err", err)
+				return 0
+			}
+
+			return int32(amount)
+		}
+	}
+
+	slog.Error("failed to find experience for thumbnail!", "id", id, "err", "not found in file")
+	return 0
+}
+
+func Thumbnails() []int32 {
+	if thumbnailsCsv == nil {
+		slog.Error("player_thumbnail.csv has not been loaded yet!")
+		return make([]int32, 0)
+	}
+
+	temp := make([]int32, 0)
+
+	for id, _ := range thumbnailsCsv {
+		temp = append(temp, int32(id))
+	}
+
+	return temp
 }

@@ -8,13 +8,13 @@ import (
 
 type AllianceChatServerMessage struct {
 	allianceId int64
-	msg core.AllianceMessage
+	msg        core.AllianceMessage
 }
 
 func NewAllianceChatServerMessage(msg core.AllianceMessage, allianceId int64) *AllianceChatServerMessage {
 	return &AllianceChatServerMessage{
 		allianceId: allianceId,
-		msg: msg,
+		msg:        msg,
 	}
 }
 
@@ -28,15 +28,15 @@ func (a *AllianceChatServerMessage) PacketVersion() uint16 {
 
 func (a *AllianceChatServerMessage) Marshal() []byte {
 	stream := core.NewByteStreamWithCapacity(64)
-	
+
 	if a.msg.Type == 43 || a.msg.Type == 44 {
 		stream.Write(core.VInt(4))
 	} else {
 		stream.Write(core.VInt(a.msg.Type))
 	}
-	
+
 	dispatchEntry(stream, a.msg)
-	
+
 	return stream.Buffer()
 }
 
@@ -58,23 +58,23 @@ func embedStreamEntry(stream *core.ByteStream, msg core.AllianceMessage) {
 
 	senderHighId := int32(0)
 	senderLowId := int32(0)
-	
+
 	if msg.PlayerId != nil {
 		senderHighId = msg.PlayerHighId
 		senderLowId = msg.PlayerLowId
 	}
-	
+
 	stream.Write(core.LogicLong{senderHighId, senderLowId})
 
 	stream.Write(msg.PlayerName)
 	stream.Write(core.VInt(msg.PlayerRole))
 
 	ageSeconds := int32(time.Since(msg.Timestamp).Seconds())
-	
+
 	if ageSeconds < 0 {
 		ageSeconds = 0
 	}
-	
+
 	stream.Write(core.VInt(ageSeconds))
 	stream.Write(false)
 }
@@ -86,10 +86,9 @@ func chatStreamEntry(stream *core.ByteStream, msg core.AllianceMessage) {
 
 func allianceEventStreamEntry(stream *core.ByteStream, msg core.AllianceMessage, event int32) {
 	embedStreamEntry(stream, msg)
-	
+
 	stream.Write(core.VInt(event))
 	stream.Write(true)
 	stream.Write(core.LogicLong{0, int32(*msg.TargetId)})
 	stream.Write(msg.PlayerName)
 }
-

@@ -19,7 +19,7 @@ type Server struct {
 	dbm *database.Manager
 
 	totalClients atomic.Int64
-	
+
 	closed bool
 }
 
@@ -58,7 +58,7 @@ func (s *Server) accept() {
 			if s.closed {
 				return
 			}
-			
+
 			slog.Error("failed to accept client!", "err", err)
 			continue
 		}
@@ -76,9 +76,9 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 	defer func() {
 		s.totalClients.Add(-1)
 		slog.Info("client disconnected", "total", s.totalClients.Load())
-		
+
 		hub.GetHub().RemoveClient(wrapper)
-		
+
 		wrapper.Close()
 	}()
 

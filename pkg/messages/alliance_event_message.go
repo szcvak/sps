@@ -9,7 +9,7 @@ type AllianceEventMessage struct {
 }
 
 func NewAllianceEventMessage(event int32) *AllianceEventMessage {
-	return &AllianceEventMessage {
+	return &AllianceEventMessage{
 		event: core.VInt(event),
 	}
 }

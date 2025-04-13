@@ -22,12 +22,12 @@ const (
 )
 
 type EventConfig struct {
-	Gamemode             string
-	RequiredBrawlers     int32
-	CoinsToClaim         int32
-	BonusCoins           int32
-	CoinsToWin           int32
-	EventText            string
+	Gamemode         string
+	RequiredBrawlers int32
+	CoinsToClaim     int32
+	BonusCoins       int32
+	CoinsToWin       int32
+	EventText        string
 }
 
 type EventSlotSchedule struct {
@@ -44,12 +44,12 @@ type ActiveEvent struct {
 }
 
 type EventManager struct {
-	mu           sync.RWMutex
-	slotData     [NumEventSlots]slotInternalData
+	mu             sync.RWMutex
+	slotData       [NumEventSlots]slotInternalData
 	locationGetter func(gameMode string) []int32
-	tickers      [NumEventSlots]*time.Ticker
-	
-	stopChan     chan struct{}
+	tickers        [NumEventSlots]*time.Ticker
+
+	stopChan chan struct{}
 }
 
 type slotInternalData struct {
@@ -61,9 +61,8 @@ type slotInternalData struct {
 var (
 	eventManagerInstance *EventManager
 	eventManagerOnce     sync.Once
-	
-	errManagerNotInit = errors.New("event manager not initialized")
-	errInvalidSlot    = errors.New("invalid event slot index")
+
+	errInvalidSlot = errors.New("invalid event slot index")
 )
 
 func InitEventManager(schedules [NumEventSlots]EventSlotSchedule) {
@@ -72,7 +71,7 @@ func InitEventManager(schedules [NumEventSlots]EventSlotSchedule) {
 			if len(s.Configs) == 0 {
 				panic(fmt.Sprintf("schedule for slot %d is empty", i))
 			}
-			
+
 			if s.Duration <= 0 {
 				panic(fmt.Sprintf("invalid duration for slot %d", i))
 			}
@@ -80,20 +79,20 @@ func InitEventManager(schedules [NumEventSlots]EventSlotSchedule) {
 
 		getter := func(gamemode string) []int32 {
 			ids := csv.GetLocationsByGamemode(gamemode)
-			
+
 			if len(ids) == 0 {
 				allIds := csv.LocationIds()
-				
+
 				if len(allIds) == 0 {
 					slog.Error("Cannot get any locations, even fallback failed!")
 					return []int32{0}
 				}
-				
+
 				slog.Warn("could not get locations for game mode, using random", "gamemode", gamemode)
-				
+
 				return allIds
 			}
-			
+
 			return ids
 		}
 
@@ -107,9 +106,9 @@ func InitEventManager(schedules [NumEventSlots]EventSlotSchedule) {
 				schedule:      schedules[i],
 				rotationIndex: -1,
 			}
-			
+
 			err := em.rotateEventForSlot(i, time.Now())
-			
+
 			if err != nil {
 				panic(fmt.Sprintf("initial rotation failed for slot %d: %v", i, err))
 			}
@@ -117,7 +116,7 @@ func InitEventManager(schedules [NumEventSlots]EventSlotSchedule) {
 
 		eventManagerInstance = em
 		eventManagerInstance.startRotationLoops()
-		
+
 		slog.Info("event manager initialized")
 	})
 }
@@ -126,7 +125,7 @@ func GetEventManager() *EventManager {
 	if eventManagerInstance == nil {
 		panic("event manager not initialized")
 	}
-	
+
 	return eventManagerInstance
 }
 
@@ -147,7 +146,7 @@ func DefaultSchedules() [NumEventSlots]EventSlotSchedule {
 		},
 		{
 			Configs: []EventConfig{
-				{Gamemode: GameModeHeist, RequiredBrawlers: 0, CoinsToClaim: 2000, BonusCoins: 12, CoinsToWin: 2000, EventText: "Heist"},
+				{Gamemode: GameModeHeist, RequiredBrawlers: 0, CoinsToClaim: 1000, BonusCoins: 12, CoinsToWin: 2000, EventText: "Heist"},
 				{Gamemode: GameModeBounty, RequiredBrawlers: 0, CoinsToClaim: 1000, BonusCoins: 10, CoinsToWin: 1000, EventText: "Bounty"},
 			},
 			Duration: 3 * time.Hour,
@@ -164,9 +163,9 @@ func DefaultSchedules() [NumEventSlots]EventSlotSchedule {
 func (em *EventManager) startRotationLoops() {
 	for i := 0; i < NumEventSlots; i++ {
 		ticker := time.NewTicker(em.slotData[i].schedule.Duration)
-		
+
 		em.tickers[i] = ticker
-		
+
 		go em.slotRotationLoop(i, ticker.C)
 	}
 }
@@ -176,26 +175,26 @@ func (em *EventManager) Close() {
 	defer em.mu.Unlock()
 
 	close(em.stopChan)
-	
+
 	for i := 0; i < NumEventSlots; i++ {
 		if em.tickers[i] != nil {
 			em.tickers[i].Stop()
 		}
 	}
-	
+
 	slog.Info("rotation loops stopped")
 }
 
 func (em *EventManager) slotRotationLoop(slotIndex int, tick <-chan time.Time) {
 	slog.Info("starting rotation loop", "slot", slotIndex)
-	
+
 	for {
 		select {
 		case now := <-tick:
 			slog.Info("rotation triggered by ticker", "slot", slotIndex)
-			
+
 			err := em.rotateEventForSlot(slotIndex, now)
-			
+
 			if err != nil {
 				slog.Error("failed to rotate event!", "slot", slotIndex, "err", err)
 			}
@@ -225,9 +224,9 @@ func (em *EventManager) rotateEventForSlot(slotIndex int, startTime time.Time) e
 	config := schedule.Configs[slot.rotationIndex]
 
 	possibleLocations := em.locationGetter(config.Gamemode)
-	
+
 	var locationID int32
-	
+
 	if len(possibleLocations) > 0 {
 		locationID = possibleLocations[rand.Intn(len(possibleLocations))]
 	} else {
@@ -248,6 +247,10 @@ func (em *EventManager) rotateEventForSlot(slotIndex int, startTime time.Time) e
 	return nil
 }
 
+func (em *EventManager) GetSlotConfig(slot int32) EventConfig {
+	return em.slotData[slot].currentEvent.Config
+}
+
 func (em *EventManager) Embed(stream *ByteStream) {
 	em.mu.RLock()
 	defer em.mu.RUnlock()
@@ -255,20 +258,20 @@ func (em *EventManager) Embed(stream *ByteStream) {
 	now := time.Now()
 
 	stream.Write(VInt(NumEventSlots))
-	
+
 	for i := 0; i < NumEventSlots; i++ {
 		event := em.slotData[i].currentEvent
-		
+
 		stream.Write(VInt(event.SlotIndex + 1))
 		stream.Write(VInt(event.Config.RequiredBrawlers))
 	}
 
 	stream.Write(VInt(NumEventSlots))
-	
+
 	for i := 0; i < NumEventSlots; i++ {
 		event := em.slotData[i].currentEvent
 		timeLeft := int32(event.EndTime.Sub(now).Seconds())
-		
+
 		if timeLeft < 0 {
 			timeLeft = 1
 		}
@@ -289,7 +292,7 @@ func (em *EventManager) Embed(stream *ByteStream) {
 		stream.Write(ScId{15, event.LocationID})
 
 		stream.Write(VInt(0))
-		stream.Write(VInt(0))
+		stream.Write(VInt(1)) // 1=new event, 2=seen
 
 		stream.Write(event.Config.EventText)
 		stream.Write(false)
@@ -306,20 +309,20 @@ func (em *EventManager) Embed(stream *ByteStream) {
 		nextConfig := schedule.Configs[nextIndexInSlotSchedule]
 
 		timeUntilNextRotation := int32(0)
-		
+
 		if currentEvent.EndTime.After(now) {
 			timeUntilNextRotation = int32(currentEvent.EndTime.Sub(now).Seconds())
 		}
-		
+
 		if timeUntilNextRotation <= 0 {
 			timeUntilNextRotation = 1
 		}
 
 		totalDurationSeconds := int32(schedule.Duration.Seconds())
 		possibleLocations := em.locationGetter(nextConfig.Gamemode)
-		
+
 		var locationID int32
-		
+
 		if len(possibleLocations) > 0 {
 			locationID = possibleLocations[rand.Intn(len(possibleLocations))]
 		} else {

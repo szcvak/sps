@@ -10,9 +10,13 @@ func LoadAll() error {
 	if err := loadLocations(); err != nil {
 		return fmt.Errorf("failed to load locations: %w\n", err)
 	}
-	
+
 	if err := loadCharacters(); err != nil {
 		return fmt.Errorf("failed to load characters: %w\n", err)
+	}
+
+	if err := loadThumbnails(); err != nil {
+		return fmt.Errorf("failed to load thumbnails: %w\n", err)
 	}
 
 	return nil

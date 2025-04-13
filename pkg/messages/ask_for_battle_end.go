@@ -75,14 +75,14 @@ func (a *AskForBattleEndMessage) Unmarshal(data []byte) {
 func (a *AskForBattleEndMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
 	player := wrapper.Player
 	charId := int32(-1)
-	
+
 	playerIndex := -1
-	
+
 	for i, entry := range a.data.Brawlers {
 		if entry.IsPlayer {
 			charId = entry.CharacterId.S
 			playerIndex = i
-			
+
 			break
 		}
 	}
@@ -94,26 +94,25 @@ func (a *AskForBattleEndMessage) Process(wrapper *core.ClientWrapper, dbm *datab
 
 	if brawlerData, ok := player.Brawlers[charId]; ok {
 		powerLevel := int32(0)
-		
+
 		for cardStr, amt := range brawlerData.Cards {
 			id, err := strconv.Atoi(cardStr)
-			
+
 			if err != nil {
 				slog.Error("failed to convert card str!", "card", cardStr, "playerId", player.DbId)
 				continue
 			}
-			
+
 			if !csv.IsCardUnlocked(id) {
 				powerLevel += amt
 			}
 		}
-		
+
 		a.data.Brawlers[playerIndex].PowerLevel = powerLevel
 	} else {
 		slog.Warn("player data for brawler not found", "playerId", player.DbId, "charId", charId)
 		a.data.Brawlers[playerIndex].PowerLevel = 1
 	}
-
 
 	a.data.IsRealGame = player.TutorialState != 1
 	a.data.IsTutorial = !a.data.IsRealGame

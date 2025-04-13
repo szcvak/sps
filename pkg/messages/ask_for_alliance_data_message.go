@@ -15,7 +15,7 @@ func NewAskForAllianceDataMessage() *AskForAllianceDataMessage {
 
 func (a *AskForAllianceDataMessage) Unmarshal(data []byte) {
 	stream := core.NewByteStream(data)
-	
+
 	_, _ = stream.ReadInt()
 	a.id, _ = stream.ReadInt()
 }

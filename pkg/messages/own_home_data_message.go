@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/config"
 	"github.com/szcvak/sps/pkg/core"
+	"github.com/szcvak/sps/pkg/database"
 )
 
 type OwnHomeDataMessage struct {

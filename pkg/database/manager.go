@@ -2,8 +2,8 @@ package database
 
 import (
 	"context"
-	"encoding/json"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
@@ -245,7 +245,7 @@ func (m *Manager) LoadPlayerByIds(ctx context.Context, high int32, low int32) (*
 	defer conn.Release()
 
 	player := core.NewPlayer()
-	
+
 	var allianceId sql.NullInt64
 	var allianceRole sql.NullInt16
 
@@ -273,13 +273,13 @@ func (m *Manager) LoadPlayerByIds(ctx context.Context, high int32, low int32) (*
 
 		return nil, fmt.Errorf("failed to query core/progression data: %w", err)
 	}
-	
+
 	if allianceId.Valid {
 		player.AllianceId = &allianceId.Int64
 	} else {
 		player.AllianceId = nil
 	}
-	
+
 	if allianceRole.Valid {
 		player.AllianceRole = allianceRole.Int16
 	} else {
@@ -367,7 +367,7 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 	defer conn.Release()
 
 	player := core.NewPlayer()
-	
+
 	var allianceId sql.NullInt64
 	var allianceRole sql.NullInt16
 
@@ -395,13 +395,13 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 
 		return nil, fmt.Errorf("failed to query core/progression data for player with token %s: %w", token, err)
 	}
-	
+
 	if allianceId.Valid {
 		player.AllianceId = &allianceId.Int64
 	} else {
 		player.AllianceId = nil
 	}
-	
+
 	if allianceRole.Valid {
 		player.AllianceRole = allianceRole.Int16
 	} else {
@@ -489,11 +489,11 @@ func (m *Manager) Exec(query string, args ...interface{}) error {
 
 func (m *Manager) LoadAlliance(ctx context.Context, allianceId int64) (*core.Alliance, error) {
 	conn, err := m.pool.Acquire(ctx)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire connection: %w", err)
 	}
-	
+
 	defer conn.Release()
 
 	a := core.NewAlliance(allianceId)
@@ -532,11 +532,11 @@ func (m *Manager) LoadAlliance(ctx context.Context, allianceId int64) (*core.All
 		order by am.role desc, pp.trophies desc`
 
 	rows, err := conn.Query(ctx, stmt, allianceId)
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	defer rows.Close()
 
 	a.Members = make([]core.AllianceMember, 0)
@@ -565,7 +565,7 @@ func (m *Manager) LoadAlliance(ctx context.Context, allianceId int64) (*core.All
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	
+
 	a.TotalMembers = int32(len(a.Members))
 
 	return a, nil
@@ -573,11 +573,11 @@ func (m *Manager) LoadAlliance(ctx context.Context, allianceId int64) (*core.All
 
 func (m *Manager) GetAlliances(ctx context.Context) ([]*core.Alliance, error) {
 	conn, err := m.pool.Acquire(ctx)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire connection for getting alliances: %w", err)
 	}
-	
+
 	defer conn.Release()
 
 	stmt := `
@@ -595,22 +595,22 @@ func (m *Manager) GetAlliances(ctx context.Context) ([]*core.Alliance, error) {
 		order by a.total_trophies desc, a.name asc`
 
 	rows, err := conn.Query(ctx, stmt)
-	
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return []*core.Alliance{}, nil
 		}
-		
+
 		return nil, fmt.Errorf("failed to query alliances with counts: %w", err)
 	}
-	
+
 	defer rows.Close()
 
 	alliancesList := make([]*core.Alliance, 0)
 
 	for rows.Next() {
 		a := core.NewAlliance(0)
-		
+
 		var creatorId sql.NullInt64
 		var memberCount int32
 
@@ -636,10 +636,10 @@ func (m *Manager) GetAlliances(ctx context.Context) ([]*core.Alliance, error) {
 		} else {
 			a.CreatorId = nil
 		}
-		
+
 		a.TotalMembers = memberCount
 		a.Members = make([]core.AllianceMember, 0)
-		
+
 		alliancesList = append(alliancesList, a)
 	}
 
@@ -656,11 +656,11 @@ func (m *Manager) LoadAllianceMessages(ctx context.Context, allianceId int64, li
 	}
 
 	conn, err := m.pool.Acquire(ctx)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire connection: %w", err)
 	}
-	
+
 	defer conn.Release()
 
 	stmt := `
@@ -677,15 +677,15 @@ func (m *Manager) LoadAllianceMessages(ctx context.Context, allianceId int64, li
         limit $2`
 
 	rows, err := conn.Query(ctx, stmt, allianceId, limit)
-	
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return []core.AllianceMessage{}, nil
 		}
-		
+
 		return nil, fmt.Errorf("failed to query alliance messages for id %d: %w", allianceId, err)
 	}
-	
+
 	defer rows.Close()
 
 	messages := make([]core.AllianceMessage, 0, limit)
@@ -706,7 +706,7 @@ func (m *Manager) LoadAllianceMessages(ctx context.Context, allianceId int64, li
 			&dbTargetId, &dbTargetName,
 			&msg.Timestamp,
 		)
-		
+
 		if err != nil {
 			slog.Error("failed to scan alliance message row, skipping", "allianceId", allianceId, "err", err)
 			continue
@@ -715,15 +715,15 @@ func (m *Manager) LoadAllianceMessages(ctx context.Context, allianceId int64, li
 		if dbPlayerId.Valid {
 			msg.PlayerId = &dbPlayerId.Int64
 		}
-		
+
 		if dbContent.Valid {
 			msg.Content = dbContent.String
 		}
-		
+
 		if dbTargetId.Valid {
 			msg.TargetId = &dbTargetId.Int64
 		}
-		
+
 		if dbTargetName.Valid {
 			msg.TargetName = dbTargetName.String
 		}
@@ -736,17 +736,17 @@ func (m *Manager) LoadAllianceMessages(ctx context.Context, allianceId int64, li
 	}
 
 	reverseMessages(messages)
-	
+
 	return messages, nil
 }
 
 func (m *Manager) AddAllianceMessage(ctx context.Context, allianceId int64, sender *core.Player, msgType int16, content string, targetPlayer *core.Player) (*core.AllianceMessage, error) {
 	conn, err := m.pool.Acquire(ctx)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire connection: %w", err)
 	}
-	
+
 	defer conn.Release()
 
 	var dbPlayerId sql.NullInt64
@@ -759,25 +759,25 @@ func (m *Manager) AddAllianceMessage(ctx context.Context, allianceId int64, send
 	if sender != nil {
 		dbPlayerId.Valid = true
 		dbPlayerId.Int64 = sender.DbId
-		
+
 		dbPlayerHighId.Valid = true
 		dbPlayerHighId.Int32 = sender.HighId
-		
+
 		dbPlayerLowId.Valid = true
 		dbPlayerLowId.Int32 = sender.LowId
-		
+
 		dbPlayerName.Valid = true
 		dbPlayerName.String = sender.Name
-		
+
 		dbPlayerRole.Valid = true
 		dbPlayerRole.Int16 = sender.AllianceRole
-		
+
 		dbPlayerIcon.Valid = true
 		dbPlayerIcon.Int32 = sender.ProfileIcon
 	}
 
 	var dbContent sql.NullString
-	
+
 	if content != "" {
 		dbContent.Valid = true
 		dbContent.String = content
@@ -785,15 +785,15 @@ func (m *Manager) AddAllianceMessage(ctx context.Context, allianceId int64, send
 
 	var dbTargetId sql.NullInt64
 	var dbTargetName sql.NullString
-	
+
 	if targetPlayer != nil {
 		dbTargetId.Valid = true
 		dbTargetId.Int64 = targetPlayer.DbId
-		
+
 		dbTargetName.Valid = true
 		dbTargetName.String = targetPlayer.Name
 	}
-	
+
 	stmt := `
         insert into alliance_messages (
             alliance_id, player_id,
@@ -823,22 +823,22 @@ func (m *Manager) AddAllianceMessage(ctx context.Context, allianceId int64, send
 
 	if err != nil {
 		senderId := int64(0)
-		
+
 		if sender != nil {
 			senderId = sender.DbId
 		}
-		
+
 		slog.Error("failed to insert alliance message!", "allianceId", allianceId, "senderId", senderId, "type", msgType, "err", err)
-		
+
 		return nil, fmt.Errorf("failed to insert alliance message: %w", err)
 	}
 
 	persistedMsg := &core.AllianceMessage{
-		Id:           newMessageId,
-		AllianceId:   allianceId,
-		Type:         msgType,
-		Content:      dbContent.String,
-		Timestamp:    newMessageTimestamp,
+		Id:         newMessageId,
+		AllianceId: allianceId,
+		Type:       msgType,
+		Content:    dbContent.String,
+		Timestamp:  newMessageTimestamp,
 	}
 
 	if dbPlayerId.Valid {
@@ -849,7 +849,7 @@ func (m *Manager) AddAllianceMessage(ctx context.Context, allianceId int64, send
 		persistedMsg.PlayerRole = dbPlayerRole.Int16
 		persistedMsg.PlayerIcon = dbPlayerIcon.Int32
 	}
-	
+
 	if dbTargetId.Valid {
 		persistedMsg.TargetId = &dbTargetId.Int64
 		persistedMsg.TargetName = dbTargetName.String
@@ -870,45 +870,45 @@ func (m *Manager) AddAllianceMember(ctx context.Context, player *core.Player, al
 			_ = tx.Rollback(ctx)
 			panic(r)
 		}
-		
+
 		if err != nil {
 			_ = tx.Rollback(ctx)
 		}
 	}()
-	
+
 	_, err = tx.Exec(
 		ctx,
 		"update alliances set total_trophies = total_trophies + $1 where id = $2",
 		player.Trophies, allianceId,
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to increase alliance trophies: %w", err)
 	}
-	
+
 	_, err = tx.Exec(
 		ctx,
 		"insert into alliance_members (alliance_id, player_id) values ($1, $2)",
 		allianceId, player.DbId,
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to insert into alliance_members: %w", err)
 	}
-	
+
 	err = tx.Commit(ctx)
 
 	if err != nil {
 		return fmt.Errorf("failed to commit transaction for alliance member %d: %w", player.DbId, err)
 	}
-	
+
 	player.AllianceId = new(int64)
 	*player.AllianceId = allianceId
-	
+
 	player.AllianceRole = 1
-	
+
 	slog.Info("player joined an alliance", "playerId", player.DbId, "allianceId", allianceId)
-	
+
 	return nil
 }
 
@@ -920,119 +920,121 @@ func (m *Manager) RemoveAllianceMember(ctx context.Context, player *core.Player,
 	}
 
 	defer tx.Rollback(ctx)
-	
+
 	_, err = tx.Exec(
 		ctx,
 		"update alliances set total_trophies = total_trophies - $1 where id = $2",
 		player.Trophies, allianceId,
 	)
-	
+
 	if err != nil {
 		return false, fmt.Errorf("failed to decrease alliance trophies: %w", err)
 	}
-	
+
 	_, err = tx.Exec(
 		ctx,
 		"delete from alliance_members where player_id = $1",
 		player.DbId,
 	)
-	
+
 	if err != nil {
 		return false, fmt.Errorf("failed to delete member from alliance: %w", err)
 	}
-	
+
 	var members int32
-	
+
 	err = tx.QueryRow(
 		ctx,
 		"select count(*) from alliance_members where alliance_id = $1",
 		allianceId,
 	).Scan(&members)
-	
+
 	if err != nil {
 		return false, fmt.Errorf("failed to count members: %w", err)
 	}
-	
+
 	deleted := false
-	
+
 	if members <= 0 {
 		err = m.DeleteAlliance(ctx, allianceId, tx)
-		
+
 		if err != nil {
 			return false, fmt.Errorf("failed to delete alliance: %w", err)
 		}
-		
+
 		deleted = true
 	}
-	
+
 	err = tx.Commit(ctx)
 
 	if err != nil {
 		return deleted, fmt.Errorf("failed to commit transaction for alliance member %d: %w", player.DbId, err)
 	}
-	
+
 	player.AllianceId = nil
 	player.AllianceRole = 0
-	
+
 	slog.Info("player left an alliance", "playerId", player.DbId, "allianceId", allianceId)
-	
+
 	return deleted, nil
 }
 
 func (m *Manager) DeleteAlliance(ctx context.Context, allianceId int64, tx pgx.Tx) error {
 	var err error
-	
+
 	newTx := false
 
 	if tx == nil {
 		tx, err = m.pool.Begin(ctx)
-		
+
 		if err != nil {
 			return fmt.Errorf("failed to begin transaction for delete alliance: %w", err)
 		}
-		
+
 		newTx = true
 
 		defer func() {
 			r := recover()
-			
+
 			if err != nil || r != nil {
 				_ = tx.Rollback(ctx)
-				if r != nil { panic(r) }
+				if r != nil {
+					panic(r)
+				}
 			}
 		}()
 	}
-	
+
 	_, err = tx.Exec(
 		ctx,
 		"delete from alliance_messages where alliance_id = $1",
 		allianceId,
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to delete alliance messages: %w", err)
 	}
-	
+
 	_, err = tx.Exec(
 		ctx,
 		"delete from alliances where id = $1",
 		allianceId,
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to delete alliance: %w", err)
 	}
-	
+
 	if newTx {
 		err = tx.Commit(ctx)
-	
+
 		if err != nil {
 			return fmt.Errorf("failed to commit transaction for alliance: %w", err)
 		}
 	}
-	
+
 	slog.Info("deleted an alliance", "allianceId", allianceId)
-	
+
 	return nil
 }
 
@@ -1048,47 +1050,47 @@ func (m *Manager) CreateAlliance(ctx context.Context, name string, description s
 			_ = tx.Rollback(ctx)
 			panic(r)
 		}
-		
+
 		if err != nil {
 			_ = tx.Rollback(ctx)
 		}
 	}()
-	
+
 	var newId int64
-	
+
 	err = tx.QueryRow(
 		ctx,
 		"insert into alliances (name, description, badge_id, type, required_trophies, total_trophies, creator_id) values ($1, $2, $3, $4, $5, $6, $7) returning id",
 		name, description, badge, allianceType, requiredTrophies, creator.Trophies, creator.DbId,
 	).Scan(&newId)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to create alliance: %w", err)
 	}
-	
+
 	_, err = tx.Exec(
 		ctx,
 		"insert into alliance_members (alliance_id, player_id, role) values ($1, $2, $3)",
 		newId, creator.DbId, 4,
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to insert alliance member: %w", err)
 	}
-	
+
 	err = tx.Commit(ctx)
 
 	if err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	creator.AllianceId = new(int64)
 	*creator.AllianceId = newId
-	
-	creator.AllianceRole = 4
-	
+
+	creator.AllianceRole = 2
+
 	slog.Info("created an alliance", "allianceId", newId)
-	
+
 	return nil
 }
 

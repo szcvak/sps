@@ -25,37 +25,37 @@ type AllianceMessage struct {
 
 type AllianceMember struct {
 	PlayerId int64
-	Role int16
-	
+	Role     int16
+
 	Name string
-	
+
 	Experience int32
-	Trophies int32
-	
+	Trophies   int32
+
 	ProfileIcon int32
-	LowId int32
+	LowId       int32
 }
 
 type Alliance struct {
 	Id int64
-	
-	Name string
+
+	Name        string
 	Description string
-	
+
 	BadgeId int32
-	Type int16
-	
+	Type    int16
+
 	RequiredTrophies int32
-	TotalTrophies int32
-	
+	TotalTrophies    int32
+
 	CreatorId *int64
-	
-	Members []AllianceMember
+
+	Members      []AllianceMember
 	TotalMembers int32
 }
 
 func NewAlliance(id int64) *Alliance {
-	return &Alliance {
+	return &Alliance{
 		Id: id,
 	}
 }

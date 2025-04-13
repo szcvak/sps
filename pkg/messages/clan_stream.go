@@ -1,22 +1,22 @@
 package messages
 
 import (
-	"log/slog"
 	"context"
-	
+	"log/slog"
+
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
 )
 
 type ClanStreamMessage struct {
 	wrapper *core.ClientWrapper
-	dbm *database.Manager
+	dbm     *database.Manager
 }
 
 func NewClanStreamMessage(wrapper *core.ClientWrapper, dbm *database.Manager) *ClanStreamMessage {
-	return &ClanStreamMessage {
+	return &ClanStreamMessage{
 		wrapper: wrapper,
-		dbm: dbm,
+		dbm:     dbm,
 	}
 }
 
@@ -32,23 +32,23 @@ func (c *ClanStreamMessage) Marshal() []byte {
 	stream := core.NewByteStreamWithCapacity(8)
 
 	allianceId := c.wrapper.Player.AllianceId
-	
+
 	if allianceId == nil {
 		stream.Write(core.VInt(0))
 		stream.Write(core.VInt(0))
-		
+
 		return stream.Buffer()
 	}
-	
+
 	msgs, err := c.dbm.LoadAllianceMessages(context.Background(), *allianceId, 50)
-	
+
 	if err != nil {
 		slog.Error("failed to load alliance messages!", "err", err)
 		return stream.Buffer()
 	}
-	
+
 	stream.Write(core.VInt(len(msgs)))
-	
+
 	if len(msgs) == 0 {
 		stream.Write(core.VInt(0))
 	} else {
@@ -58,7 +58,7 @@ func (c *ClanStreamMessage) Marshal() []byte {
 			} else {
 				stream.Write(core.VInt(msg.Type))
 			}
-			
+
 			dispatchEntry(stream, msg)
 		}
 	}

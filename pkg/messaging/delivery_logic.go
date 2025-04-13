@@ -1,12 +1,12 @@
-package messaging 
+package messaging
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math/rand"
 	"strconv"
 	"time"
-	"encoding/json"
 
 	"github.com/mroth/weightedrand/v2"
 	"github.com/szcvak/sps/pkg/config"
@@ -16,22 +16,22 @@ import (
 )
 
 const (
-	RewardIdBrawler int32 = 1
-	RewardIdChips int32 = 2
-	RewardIdElixir int32 = 3
+	RewardIdBrawler     int32 = 1
+	RewardIdChips       int32 = 2
+	RewardIdElixir      int32 = 3
 	RewardIdCoinDoubler int32 = 4
 	RewardIdCoinBooster int32 = 5
-	
+
 	DataRefClassCard int32 = 23
 
 	DataRefInstanceElixir int32 = 0
 )
 
 type RewardItem struct {
-	Rarity      int32
-	Amount      int32
-	RewardId    int32
-	DataRef     core.DataRef
+	Rarity   int32
+	Amount   int32
+	RewardId int32
+	DataRef  core.DataRef
 }
 
 type BoxConfig struct {
@@ -85,28 +85,28 @@ func NewDeliveryLogic(wrapper *core.ClientWrapper, dbm *database.Manager) *Deliv
 
 func (d *DeliveryLogic) GenerateRewards(boxTypeIdentifier int32) error {
 	boxConf, ok := boxConfigs[boxTypeIdentifier]
-	
+
 	if !ok {
 		err := fmt.Errorf("unknown box type identifier: %d", boxTypeIdentifier)
 		slog.Error("failed to generate rewards!", "err", err)
-		
+
 		return err
 	}
 
 	player := d.wrapper.Player
 	wallet, exists := player.Wallet[boxConf.CurrencyId]
-	
+
 	if !exists || wallet.Balance < int64(boxConf.Price) {
 		err := fmt.Errorf("insufficient funds for box %d (Type %d): need %d of currency %d, have %d",
 			boxConf.Id, boxTypeIdentifier, boxConf.Price, boxConf.CurrencyId, wallet.Balance)
 
 		slog.Warn("will not giwe out rewards", "playerId", player.DbId, "err", err)
-		
+
 		return err
 	}
 
 	newBalance := wallet.Balance - int64(boxConf.Price)
-	
+
 	err := d.dbm.Exec("update player_wallet set balance = $1 where player_id = $2 and currency_id = $3",
 		newBalance, player.DbId, boxConf.CurrencyId)
 
@@ -116,56 +116,56 @@ func (d *DeliveryLogic) GenerateRewards(boxTypeIdentifier int32) error {
 	}
 
 	wallet.Balance = newBalance
-	
+
 	d.boxId = boxConf.Id
 	d.rewards = make([]RewardItem, 0, boxConf.RewardsCount)
 
 	for i := 0; i < boxConf.RewardsCount; i++ {
 		reward, err := d.generateSingleReward()
-		
+
 		if err != nil {
 			slog.Error("failed to generate reward!", "boxId", d.boxId, "itemIndex", i, "err", err)
 			continue
 		}
-		
+
 		if reward != nil {
 			d.rewards = append(d.rewards, *reward)
 		}
 	}
 
 	slog.Info("generated rewards", "playerId", player.DbId, "boxId", d.boxId, "count", len(d.rewards))
-	
+
 	return nil
 }
 
 func (d *DeliveryLogic) generateSingleReward() (*RewardItem, error) {
 	rarityId := int32(config.BoxRewardRarityChooser.Pick())
 	rarityConf, ok := rarityConfigs[rarityId]
-	
+
 	if !ok {
 		return nil, fmt.Errorf("invalid rarity picked: %d", rarityId)
 	}
 
 	choices := []weightedrand.Choice[int, uint]{}
-	
+
 	if rarityConf.WeightElixir > 0 {
 		choices = append(choices, weightedrand.NewChoice(0, rarityConf.WeightElixir))
 	}
-	
+
 	if rarityConf.WeightBrawler > 0 {
 		choices = append(choices, weightedrand.NewChoice(1, rarityConf.WeightBrawler))
 	}
-	
+
 	if rarityConf.WeightBooster > 0 {
 		choices = append(choices, weightedrand.NewChoice(2, rarityConf.WeightBooster))
 	}
-	
+
 	if rarityConf.WeightDoubler > 0 {
 		choices = append(choices, weightedrand.NewChoice(3, rarityConf.WeightDoubler))
 	}
 
 	chooser, err := weightedrand.NewChooser(choices...)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create reward type chooser for rarity %d: %w", rarityId, err)
 	}
@@ -177,12 +177,12 @@ func (d *DeliveryLogic) generateSingleReward() (*RewardItem, error) {
 		return d.grantElixir(rarityConf.ElixirAmount, rarityId)
 	case 1: // Brawler
 		characters := csv.GetBrawlersWithRarity(rarityConf.Name)
-		
+
 		if len(characters) == 0 {
 			slog.Warn("no brawlers found for rarity, will give elixir", "rarity", rarityConf.Name)
 			return d.grantElixir(rarityConf.ElixirAmount, rarityId)
 		}
-		
+
 		selected := characters[rand.Intn(len(characters))]
 		return d.grantBrawler(selected, rarityConf.ChipAmount, rarityId)
 	case 2: // booster
@@ -200,15 +200,15 @@ func (d *DeliveryLogic) grantElixir(amount int32, rarity int32) (*RewardItem, er
 	if amount <= 0 {
 		return nil, fmt.Errorf("invalid elixir amount: %d", amount)
 	}
-	
+
 	player := d.wrapper.Player
 	currencyId := config.CurrencyElixir
 
 	newBalance := player.Wallet[int32(currencyId)].Balance + int64(amount)
-	
+
 	err := d.dbm.Exec("update player_wallet set balance = $1 where player_id = $2 and currency_id = $3",
 		newBalance, player.DbId, currencyId)
-		
+
 	if err != nil {
 		slog.Error("failed to update elixir", "playerId", player.DbId, "err", err)
 		return nil, fmt.Errorf("error granting elixir: %w", err)
@@ -217,10 +217,10 @@ func (d *DeliveryLogic) grantElixir(amount int32, rarity int32) (*RewardItem, er
 	player.Wallet[int32(currencyId)].Balance = newBalance
 
 	return &RewardItem{
-		Rarity:      rarity,
-		Amount:      amount,
-		RewardId:    RewardIdElixir,
-		DataRef:     core.DataRef{DataRefClassCard, DataRefInstanceElixir},
+		Rarity:   rarity,
+		Amount:   amount,
+		RewardId: RewardIdElixir,
+		DataRef:  core.DataRef{DataRefClassCard, DataRefInstanceElixir},
 	}, nil
 }
 
@@ -228,15 +228,15 @@ func (d *DeliveryLogic) grantChips(amount int32, id int32, rarity int32) (*Rewar
 	if amount <= 0 {
 		return nil, fmt.Errorf("invalid chip amount: %d", amount)
 	}
-	
+
 	player := d.wrapper.Player
 	currencyId := config.CurrencyChips
 
 	newBalance := player.Wallet[int32(currencyId)].Balance + int64(amount)
-	
+
 	err := d.dbm.Exec("update player_wallet set balance = $1 where player_id = $2 and currency_id = $3",
 		newBalance, player.DbId, currencyId)
-		
+
 	if err != nil {
 		slog.Error("failed to update chips", "playerId", player.DbId, "err", err)
 		return nil, fmt.Errorf("error granting chips: %w", err)
@@ -245,10 +245,10 @@ func (d *DeliveryLogic) grantChips(amount int32, id int32, rarity int32) (*Rewar
 	player.Wallet[int32(currencyId)].Balance = newBalance
 
 	return &RewardItem{
-		Rarity:      rarity,
-		Amount:      amount,
-		RewardId:    RewardIdChips,
-		DataRef:     core.DataRef{DataRefClassCard, id},
+		Rarity:   rarity,
+		Amount:   amount,
+		RewardId: RewardIdChips,
+		DataRef:  core.DataRef{DataRefClassCard, id},
 	}, nil
 }
 
@@ -256,9 +256,9 @@ func (d *DeliveryLogic) grantCoinBooster(duration int32, rarity int32) (*RewardI
 	if duration <= 0 {
 		return nil, fmt.Errorf("invalid booster duration: %d", duration)
 	}
-	
+
 	player := d.wrapper.Player
-	
+
 	now := time.Now().Unix()
 	newBoosterEndTime := player.CoinBooster
 
@@ -269,7 +269,7 @@ func (d *DeliveryLogic) grantCoinBooster(duration int32, rarity int32) (*RewardI
 	}
 
 	err := d.dbm.Exec("update players set coin_booster = $1 where id = $2", newBoosterEndTime, player.DbId)
-	
+
 	if err != nil {
 		slog.Error("failed to update coin_booster!", "playerId", player.DbId, "err", err)
 		return nil, fmt.Errorf("error granting booster: %w", err)
@@ -278,10 +278,10 @@ func (d *DeliveryLogic) grantCoinBooster(duration int32, rarity int32) (*RewardI
 	player.CoinBooster = newBoosterEndTime
 
 	return &RewardItem{
-		Rarity:      rarity,
-		Amount:      duration,
-		RewardId:    RewardIdCoinBooster,
-		DataRef:     core.DataRef{DataRefClassCard, 0},
+		Rarity:   rarity,
+		Amount:   duration,
+		RewardId: RewardIdCoinBooster,
+		DataRef:  core.DataRef{DataRefClassCard, 0},
 	}, nil
 }
 
@@ -289,12 +289,12 @@ func (d *DeliveryLogic) grantCoinDoubler(amount int32, rarity int32) (*RewardIte
 	if amount <= 0 {
 		return nil, fmt.Errorf("invalid doubler amount: %d", amount)
 	}
-	
+
 	player := d.wrapper.Player
 	newAmount := amount + player.CoinDoubler
-	
+
 	err := d.dbm.Exec("update players set coin_doubler = $1 where id = $2", newAmount, player.DbId)
-	
+
 	if err != nil {
 		slog.Error("failed to update coin_doubler!", "playerId", player.DbId, "err", err)
 		return nil, fmt.Errorf("error granting doubler: %w", err)
@@ -303,10 +303,10 @@ func (d *DeliveryLogic) grantCoinDoubler(amount int32, rarity int32) (*RewardIte
 	player.CoinDoubler = newAmount
 
 	return &RewardItem{
-		Rarity:      rarity,
-		Amount:      amount,
-		RewardId:    RewardIdCoinDoubler,
-		DataRef:     core.DataRef{DataRefClassCard, 0},
+		Rarity:   rarity,
+		Amount:   amount,
+		RewardId: RewardIdCoinDoubler,
+		DataRef:  core.DataRef{DataRefClassCard, 0},
 	}, nil
 }
 
@@ -324,17 +324,16 @@ func (d *DeliveryLogic) grantBrawler(cardId int32, chipAmount int32, rarity int3
 		newBrawlerCards := map[string]int32{cardsKey: 1}
 
 		cardsJson, err := json.Marshal(newBrawlerCards)
-		
+
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal new brawler cards to json: %w", err)
 		}
-		
+
 		skinsJson, err := json.Marshal([]int32{0})
-		
+
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal new brawler skins to json: %w", err)
 		}
-
 
 		brawler := &core.PlayerBrawler{
 			BrawlerId:         brawlerId,
@@ -378,10 +377,10 @@ func (d *DeliveryLogic) grantBrawler(cardId int32, chipAmount int32, rarity int3
 		player.Brawlers[brawlerId] = brawler
 
 		return &RewardItem{
-			Rarity:      rarity,
-			Amount:      1,
-			RewardId:    RewardIdBrawler,
-			DataRef:     core.DataRef{DataRefClassCard, cardId},
+			Rarity:   rarity,
+			Amount:   1,
+			RewardId: RewardIdBrawler,
+			DataRef:  core.DataRef{DataRefClassCard, cardId},
 		}, nil
 	}
 }

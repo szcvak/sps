@@ -10,13 +10,13 @@ import (
 
 type MyAllianceMessage struct {
 	wrapper *core.ClientWrapper
-	dbm *database.Manager
+	dbm     *database.Manager
 }
 
 func NewMyAllianceMessage(wrapper *core.ClientWrapper, dbm *database.Manager) *MyAllianceMessage {
-	return &MyAllianceMessage {
+	return &MyAllianceMessage{
 		wrapper: wrapper,
-		dbm: dbm,
+		dbm:     dbm,
 	}
 }
 
@@ -37,14 +37,14 @@ func (m *MyAllianceMessage) Marshal() []byte {
 
 		return stream.Buffer()
 	}
-	
+
 	a, err := m.dbm.LoadAlliance(context.Background(), *m.wrapper.Player.AllianceId)
-	
+
 	if err != nil {
 		slog.Error("failed to load alliance!", "err", err)
 		return stream.Buffer()
 	}
-	
+
 	stream.Write(core.VInt(1)) // online members
 	stream.Write(true)
 	stream.Write(core.DataRef{25, int32(m.wrapper.Player.AllianceRole)})
@@ -57,6 +57,6 @@ func (m *MyAllianceMessage) Marshal() []byte {
 	stream.Write(core.VInt(a.TotalTrophies))
 	stream.Write(core.DataRef{0, 1})
 	stream.Write(core.VInt(a.TotalMembers))
-	
+
 	return stream.Buffer()
 }

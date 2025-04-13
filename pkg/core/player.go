@@ -61,7 +61,7 @@ type Player struct {
 
 	Brawlers map[int32]*PlayerBrawler
 	Wallet   map[int32]*PlayerCurrency
-	
+
 	AllianceId   *int64 `db:"alliance_id"`
 	AllianceRole int16  `db:"alliance_role"`
 

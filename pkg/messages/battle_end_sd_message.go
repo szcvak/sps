@@ -40,18 +40,18 @@ func (b *BattleEndSdMessage) Marshal() []byte {
 
 	playerIndex := -1
 	charId := int32(-1)
-	
+
 	for i, entry := range data.Brawlers {
 		if entry.IsPlayer {
 			playerIndex = i
 			charId = entry.CharacterId.S
-			
+
 			break
 		}
 	}
 
 	var playerBrawler *core.PlayerBrawler
-	
+
 	if playerIndex != -1 {
 		if pbData, ok := player.Brawlers[charId]; ok {
 			playerBrawler = pbData
@@ -62,7 +62,6 @@ func (b *BattleEndSdMessage) Marshal() []byte {
 		slog.Error("failed to find player brawler data", "playerId", player.DbId, "charId", charId)
 		playerBrawler = &core.PlayerBrawler{Trophies: 0, HighestTrophies: 0}
 	}
-
 
 	var (
 		trophies      int32 = 0
@@ -83,13 +82,13 @@ func (b *BattleEndSdMessage) Marshal() []byte {
 		}
 
 		doubledCoins = coins
-		
+
 		if coins > player.CoinDoubler {
 			doubledCoins = player.CoinDoubler
 		}
 
 		now := time.Now().Unix()
-		
+
 		if int64(player.CoinBooster)-now > 0 {
 			boostedCoins = coins
 		}
@@ -118,20 +117,20 @@ func (b *BattleEndSdMessage) Marshal() []byte {
 		stream.Write(pData.IsPlayer)
 
 		isEnemy := false
-		
+
 		if playerIndex != -1 && pData.Team != data.Brawlers[playerIndex].Team {
 			isEnemy = true
 		}
-		
+
 		stream.Write(isEnemy)
 
 		isStarPlayer := pData.IsPlayer
-		
+
 		stream.Write(isStarPlayer)
 
 		charId := pData.CharacterId.S
 		cardId, found := csv.GetCardForCharacter(charId)
-		
+
 		if !found {
 			slog.Warn("failed to find card id", "charId", charId)
 			stream.Write(core.ScId{16, 0})
@@ -143,15 +142,15 @@ func (b *BattleEndSdMessage) Marshal() []byte {
 		stream.Write(core.VInt(0))
 
 		powerLevel := int32(0)
-		
+
 		if pData.IsPlayer {
 			powerLevel = pData.PowerLevel - 1
-			
+
 			if powerLevel < 0 {
 				powerLevel = 0
 			}
 		}
-		
+
 		stream.Write(core.VInt(powerLevel))
 	}
 
@@ -177,47 +176,56 @@ func (b *BattleEndSdMessage) Marshal() []byte {
 	if data.IsRealGame {
 		player.Trophies += trophies
 		player.HighestTrophies = max(player.Trophies, player.HighestTrophies)
-		player.Experience += (exp + starPlayerExp)
-		
+		player.Experience += exp + starPlayerExp
+
 		if walletCoin, ok := player.Wallet[config.CurrencyCoins]; ok {
 			walletCoin.Balance += int64(coins + boostedCoins + doubledCoins)
 		}
-		
+
 		player.CoinsReward = coins + boostedCoins + doubledCoins
 
-		if charId != -1 {
+		if charId < 0 {
 			playerBrawler.Trophies += trophies
 			playerBrawler.HighestTrophies = max(playerBrawler.Trophies, playerBrawler.HighestTrophies)
 
 			logError(
 				b.dbm.Exec(
-					"UPDATE player_progression SET trophies = $1, highest_trophies = $2, experience = $3 WHERE player_id = $4",
+					"update player_progression set trophies = $1, highest_trophies = $2, experience = $3 where player_id = $4",
 					player.Trophies, player.HighestTrophies, player.Experience, player.DbId,
 				),
 			)
-			
+
 			if walletCoin, ok := player.Wallet[config.CurrencyCoins]; ok {
 				logError(
 					b.dbm.Exec(
-						"UPDATE player_wallet SET balance = $1 WHERE player_id = $2 AND currency_id = $3",
+						"update player_wallet set balance = $1 where player_id = $2 and currency_id = $3",
 						walletCoin.Balance, player.DbId, config.CurrencyCoins,
 					),
 				)
 			}
-			
+
 			logError(
 				b.dbm.Exec(
-					"UPDATE player_brawlers SET trophies = $1, highest_trophies = $2 WHERE player_id = $3 AND brawler_id = $4",
+					"update player_brawlers set trophies = $1, highest_trophies = $2 where player_id = $3 and brawler_id = $4",
 					playerBrawler.Trophies, playerBrawler.HighestTrophies, player.DbId, playerBrawler.BrawlerId,
 				),
 			)
-			
+
 			logError(
 				b.dbm.Exec(
-					"UPDATE players SET coin_doubler = $1, coins_reward = $2 WHERE id = $3",
+					"update players set coin_doubler = $1, coins_reward = $2 where id = $3",
 					player.CoinDoubler, player.CoinsReward, player.DbId,
 				),
 			)
+
+			if player.AllianceId != nil {
+				logError(
+					b.dbm.Exec(
+						"update alliances set total_trophies = total_trophies + $1 where id = $2",
+						trophies, *player.AllianceId,
+					),
+				)
+			}
 		}
 	}
 

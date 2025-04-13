@@ -151,6 +151,15 @@ func (b *BattleEndTrioMessage) Marshal() []byte {
 		),
 	)
 
+	if b.player.AllianceId != nil {
+		logError(
+			b.dbm.Exec(
+				"update alliances set total_trophies = total_trophies + $1 where id = $2",
+				trophies, *b.player.AllianceId,
+			),
+		)
+	}
+
 	return stream.Buffer()
 }
 
