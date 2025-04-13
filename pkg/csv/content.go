@@ -11,6 +11,7 @@ import (
 
 var (
 	cardsCsv      map[int][]string = nil
+	skinsCsv      map[int][]string = nil
 	locationsCsv  map[int][]string = nil
 	charactersCsv map[int][]string = nil
 	thumbnailsCsv map[int][]string = nil
@@ -187,6 +188,50 @@ func loadThumbnails() error {
 		}
 
 		thumbnailsCsv[line-2] = record
+
+		line++
+	}
+
+	return nil
+}
+
+func loadSkins() error {
+	if skinsCsv != nil {
+		return nil
+	}
+
+	slog.Info("loading skins.csv")
+
+	file, err := os.Open("assets/csv_logic/skins.csv")
+
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	skinsCsv = make(map[int][]string)
+
+	reader := csv.NewReader(file)
+	line := 0
+
+	for {
+		record, err_ := reader.Read()
+
+		if err_ != nil {
+			if err_ == io.EOF {
+				break
+			} else {
+				return fmt.Errorf("error during reading: %w\n", err_)
+			}
+		}
+
+		if line < 2 {
+			line++
+			continue
+		}
+
+		skinsCsv[line-2] = record
 
 		line++
 	}
@@ -390,19 +435,27 @@ func GetExperienceLevelForThumbnail(id int32) int32 {
 		slog.Error("player_thumbnails.csv has not been loaded yet!")
 		return 0
 	}
-
-	for line, row := range thumbnailsCsv {
-		if int32(line) == id {
-			amount, err := strconv.Atoi(row[1])
-
-			if err != nil {
-				slog.Error("failed to convert thumbnail experience to int!", "err", err)
-				return 0
-			}
-
-			return int32(amount)
-		}
+	
+	if int(id) > len(thumbnailsCsv) {
+		slog.Error("thumbnail out of range")
+		return 0
 	}
+	
+	row, exists := thumbnailsCsv[int(id)]
+	
+	if !exists {
+		slog.Error("thumbnail does not exist")
+		return 0
+	}
+
+	amount, err := strconv.Atoi(row[1])
+
+	if err != nil {
+		slog.Error("failed to convert thumbnail experience to int!", "err", err)
+		return 0
+	}
+
+	return int32(amount)
 
 	slog.Error("failed to find experience for thumbnail!", "id", id, "err", "not found in file")
 	return 0
@@ -421,4 +474,108 @@ func Thumbnails() []int32 {
 	}
 
 	return temp
+}
+
+func Skins() []int32 {
+	if skinsCsv == nil {
+		slog.Error("skins.csv has not been loaded yet!")
+		return make([]int32, 0)
+	}
+
+	temp := make([]int32, 0)
+
+	for id, _ := range skinsCsv {
+		temp = append(temp, int32(id))
+	}
+
+	return temp
+}
+
+func IsSkinDefault(id int32) bool {
+	if charactersCsv == nil {
+		slog.Error("characters.csv has not been loaded yet!")
+		return false
+	}
+	
+	if skinsCsv == nil {
+		slog.Error("skins.csv has not been loaded yet!")
+		return false
+	}
+	
+	defaultSkins := make(map[string]bool)
+	
+	for _, row := range charactersCsv {
+		defaultSkins[row[20]] = true
+	}
+	
+	if int(id) > len(skinsCsv) {
+		slog.Error("skin out of range")
+		return false
+	}
+	
+	name := skinsCsv[int(id)][0]
+	_, e :=defaultSkins[name]
+	
+	return e
+}
+
+func GetSkinPrice(id int32) int32 {
+	if skinsCsv == nil {
+		slog.Error("skins.csv has not been loaded yet!")
+		return 0
+	}
+	
+	if int(id) > len(skinsCsv) {
+		return 0
+	}
+
+	row, exists := skinsCsv[int(id)]
+	
+	if !exists {
+		slog.Error("row does not exist!")
+		return 0
+	}
+	
+	price, err := strconv.Atoi(row[3])
+	
+	if err != nil {
+		slog.Error("failed to convert to int!", "err", err)
+		return 0
+	}
+
+	return int32(price)
+}
+
+func GetBrawlerForSkin(id int32) int32 {
+	if charactersCsv == nil {
+		slog.Error("characters.csv has not been loaded yet!")
+		return 0
+	}
+	
+	if skinsCsv == nil {
+		slog.Error("skins.csv has not been loaded yet!")
+		return 0
+	}
+	
+	if int(id) > len(skinsCsv) {
+		slog.Error("skin out of range")
+		return 0
+	}
+	
+	row, exists := skinsCsv[int(id)]
+	
+	if !exists {
+		slog.Error("skin does not exist")
+		return 0
+	}
+	
+	character := row[1]
+	
+	for i, c := range charactersCsv {
+		if c[0] == character {
+			return int32(i)
+		}
+	}
+	
+	return 0
 }

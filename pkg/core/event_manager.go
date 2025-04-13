@@ -28,6 +28,8 @@ type EventConfig struct {
 	BonusCoins       int32
 	CoinsToWin       int32
 	EventText        string
+	DoubleCoins      bool
+	DoubleExp        bool
 }
 
 type EventSlotSchedule struct {
@@ -41,6 +43,7 @@ type ActiveEvent struct {
 	StartTime  time.Time
 	EndTime    time.Time
 	Config     EventConfig
+	SeenBy     []int64
 }
 
 type EventManager struct {
@@ -133,27 +136,27 @@ func DefaultSchedules() [NumEventSlots]EventSlotSchedule {
 	return [NumEventSlots]EventSlotSchedule{
 		{
 			Configs: []EventConfig{
-				{Gamemode: GameModeShowdown, RequiredBrawlers: 0, CoinsToClaim: 1000, BonusCoins: 8, CoinsToWin: 1000, EventText: "Solo Showdown"},
-				{Gamemode: GameModeGemGrab, RequiredBrawlers: 0, CoinsToClaim: 1000, BonusCoins: 10, CoinsToWin: 1000, EventText: "Gem Grab"},
+				{Gamemode: GameModeShowdown, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Solo Showdown"},
+				{Gamemode: GameModeGemGrab, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Gem Grab"},
 			},
 			Duration: 2 * time.Hour,
 		},
 		{
 			Configs: []EventConfig{
-				{Gamemode: GameModeBrawlBall, RequiredBrawlers: 0, CoinsToClaim: 500, BonusCoins: 8, CoinsToWin: 500, EventText: "Brawl Ball"},
+				{Gamemode: GameModeBrawlBall, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Brawl Ball", DoubleExp: true},
 			},
 			Duration: 1 * time.Hour,
 		},
 		{
 			Configs: []EventConfig{
-				{Gamemode: GameModeHeist, RequiredBrawlers: 0, CoinsToClaim: 1000, BonusCoins: 12, CoinsToWin: 2000, EventText: "Heist"},
-				{Gamemode: GameModeBounty, RequiredBrawlers: 0, CoinsToClaim: 1000, BonusCoins: 10, CoinsToWin: 1000, EventText: "Bounty"},
+				{Gamemode: GameModeHeist, RequiredBrawlers: 0, CoinsToClaim: 100, BonusCoins: 0, CoinsToWin: 100, EventText: "Heist", DoubleCoins: true},
+				{Gamemode: GameModeBounty, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Bounty"},
 			},
 			Duration: 3 * time.Hour,
 		},
 		{
 			Configs: []EventConfig{
-				{Gamemode: GameModeShowdown, RequiredBrawlers: 0, CoinsToClaim: 1000, BonusCoins: 8, CoinsToWin: 1000, EventText: "Solo Showdown"},
+				{Gamemode: GameModeShowdown, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Solo Showdown"},
 			},
 			Duration: 4 * time.Hour,
 		},
@@ -240,6 +243,7 @@ func (em *EventManager) rotateEventForSlot(slotIndex int, startTime time.Time) e
 		StartTime:  startTime,
 		EndTime:    startTime.Add(schedule.Duration),
 		Config:     config,
+		SeenBy:     []int64{},
 	}
 
 	slog.Info("rotated event", "slot", slotIndex, "gamemode", config.Gamemode, "location", locationID, "endTime", slot.currentEvent.EndTime)
@@ -247,11 +251,11 @@ func (em *EventManager) rotateEventForSlot(slotIndex int, startTime time.Time) e
 	return nil
 }
 
-func (em *EventManager) GetSlotConfig(slot int32) EventConfig {
-	return em.slotData[slot].currentEvent.Config
+func (em *EventManager) GetCurrentEventPtr(slot int32) *ActiveEvent {
+	return &em.slotData[slot].currentEvent
 }
 
-func (em *EventManager) Embed(stream *ByteStream) {
+func (em *EventManager) Embed(stream *ByteStream, player *Player) {
 	em.mu.RLock()
 	defer em.mu.RUnlock()
 
@@ -275,6 +279,15 @@ func (em *EventManager) Embed(stream *ByteStream) {
 		if timeLeft < 0 {
 			timeLeft = 1
 		}
+		
+		visionState := 1
+		
+		for _, id := range event.SeenBy {
+			if id == player.DbId {
+				visionState = 2
+				break
+			}
+		}
 
 		stream.Write(VInt(event.SlotIndex + 1))
 		stream.Write(VInt(event.SlotIndex + 1))
@@ -286,13 +299,13 @@ func (em *EventManager) Embed(stream *ByteStream) {
 		stream.Write(VInt(event.Config.BonusCoins))
 		stream.Write(VInt(event.Config.CoinsToWin))
 
-		stream.Write(false)
-		stream.Write(false)
+		stream.Write(event.Config.DoubleCoins)
+		stream.Write(event.Config.DoubleExp)
 
 		stream.Write(ScId{15, event.LocationID})
 
 		stream.Write(VInt(0))
-		stream.Write(VInt(1)) // 1=new event, 2=seen
+		stream.Write(VInt(visionState)) // 1=new event, 2=seen
 
 		stream.Write(event.Config.EventText)
 		stream.Write(false)
@@ -345,7 +358,7 @@ func (em *EventManager) Embed(stream *ByteStream) {
 		stream.Write(ScId{15, locationID})
 
 		stream.Write(VInt(0))
-		stream.Write(VInt(2))
+		stream.Write(VInt(1))
 
 		stream.Write(nextConfig.EventText)
 		stream.Write(false)

@@ -25,6 +25,14 @@ const (
 	// --- New player configuration --- //
 
 	NewPlayerTrophies int32 = 0
+	
+	// --- Offer configuration --- //
+	
+	CoinBoosterPrice  int64 = 20
+	CoinBoosterReward int32 = 7 * 24 * 60 * 60
+
+	CoinDoublerPrice  int64 = 50
+	CoinDoublerReward int32 = 1000
 )
 
 const (

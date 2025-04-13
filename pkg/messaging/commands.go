@@ -5,7 +5,10 @@ import (
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/csv"
 	"github.com/szcvak/sps/pkg/database"
+	
+	"encoding/json"
 	"log/slog"
+	"time"
 )
 
 type ServerCommand interface {
@@ -46,7 +49,11 @@ func init() {
 	ClientCommands[500] = func() ClientCommand { return NewClientGatchaCommand() }
 	ClientCommands[504] = func() ClientCommand { return NewClientEventActionCommand() }
 	ClientCommands[506] = func() ClientCommand { return NewClientProfileIconCommand() }
+	ClientCommands[507] = func() ClientCommand { return NewClientSelectSkinCommand() }
+	ClientCommands[508] = func() ClientCommand { return NewClientUnlockSkinCommand() }
 	ClientCommands[509] = func() ClientCommand { return NewClientSelectControlModeCommand() }
+	ClientCommands[510] = func() ClientCommand { return NewClientBuyCoinDoubler() }
+	ClientCommands[511] = func() ClientCommand { return NewClientBuyCoinBooster() }
 	ClientCommands[513] = func() ClientCommand { return NewClientSelectBattleHintsCommand() }
 }
 
@@ -96,6 +103,17 @@ type ClientEventActionCommand struct {
 
 type ClientSelectBattleHintsCommand struct{}
 
+type ClientBuyCoinDoubler struct{}
+type ClientBuyCoinBooster struct{}
+
+type ClientUnlockSkinCommand struct {
+	skin core.DataRef
+}
+
+type ClientSelectSkinCommand struct{
+	skin core.DataRef
+}
+
 func NewClientSelectControlModeCommand() *ClientSelectControlModeCommand {
 	return &ClientSelectControlModeCommand{}
 }
@@ -114,6 +132,22 @@ func NewClientProfileIconCommand() *ClientProfileIconCommand {
 
 func NewClientEventActionCommand() *ClientEventActionCommand {
 	return &ClientEventActionCommand{}
+}
+
+func NewClientBuyCoinDoubler() *ClientBuyCoinDoubler {
+	return &ClientBuyCoinDoubler{}
+}
+
+func NewClientBuyCoinBooster() *ClientBuyCoinBooster {
+	return &ClientBuyCoinBooster{}
+}
+
+func NewClientUnlockSkinCommand() *ClientUnlockSkinCommand {
+	return &ClientUnlockSkinCommand{}
+}
+
+func NewClientSelectSkinCommand() *ClientSelectSkinCommand {
+	return &ClientSelectSkinCommand{}
 }
 
 // --- Control mode --- //
@@ -166,7 +200,6 @@ func (c *ClientProfileIconCommand) UnmarshalStream(stream *core.ByteStream) {
 	}
 
 	c.profileIcon, _ = stream.ReadDataRef()
-	slog.Info("READ PROFILE", "profileIcon", c.profileIcon.S)
 }
 
 func (c *ClientProfileIconCommand) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
@@ -232,18 +265,32 @@ func (c *ClientEventActionCommand) Process(wrapper *core.ClientWrapper, dbm *dat
 	}
 
 	em := core.GetEventManager()
-	slot := em.GetSlotConfig(int32(c.eventSlot) - 1)
+	event := em.GetCurrentEventPtr(int32(c.eventSlot) - 1)
 
-	amount := int64(slot.CoinsToWin + (slot.CoinsToClaim / 2))
+	flag := false
+	
+	for _, v := range event.SeenBy {
+		if v == wrapper.Player.DbId {
+			flag = true
+			break
+		}
+	}
+	
+	if flag {
+		return
+	}
+	
+	amount := int64(event.Config.CoinsToWin + (event.Config.CoinsToClaim / 2))
 
 	slog.Info("giving event coins", "playerId", wrapper.Player.DbId, "amount", amount)
 
-	wrapper.Player.Wallet[config.CurrencyCoins].Balance += amount
-
-	if err := dbm.Exec("update player_wallet set balance = $1 where player_id = $2 and currency_id = $3", wrapper.Player.Wallet[config.CurrencyCoins].Balance, wrapper.Player.DbId, config.CurrencyCoins); err != nil {
+	if err := dbm.Exec("update player_wallet set balance = $1 where player_id = $2 and currency_id = $3", wrapper.Player.Wallet[config.CurrencyCoins].Balance + amount, wrapper.Player.DbId, config.CurrencyCoins); err != nil {
 		slog.Error("failed to update player wallet!", "err", err)
 		return
 	}
+	
+	wrapper.Player.Wallet[config.CurrencyCoins].Balance += amount
+	event.SeenBy = append(event.SeenBy, wrapper.Player.DbId)
 }
 
 // --- Select battle hints --- //
@@ -257,4 +304,168 @@ func (c *ClientSelectBattleHintsCommand) Process(wrapper *core.ClientWrapper, db
 	}
 
 	wrapper.Player.BattleHints = !wrapper.Player.BattleHints
+}
+
+// --- Buy coin doubler --- //
+
+func (c *ClientBuyCoinDoubler) UnmarshalStream(stream *core.ByteStream) {}
+
+func (c *ClientBuyCoinDoubler) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
+	newBalance := wrapper.Player.Wallet[config.CurrencyGems].Balance - config.CoinDoublerPrice
+	
+	if newBalance < 0 {
+		return
+	}
+	
+	newCoinDoubler := wrapper.Player.CoinDoubler + config.CoinDoublerReward
+	
+	if err := dbm.Exec("update players set coin_doubler = $1 where id = $2", newCoinDoubler, wrapper.Player.DbId); err != nil {
+		slog.Error("failed to update player's coin doubler!", "err", err)
+		return
+	}
+	
+	if err := dbm.Exec("update player_wallet set balance = $1 where player_id = $2 and currency_id = $3", newBalance, wrapper.Player.DbId, config.CurrencyGems); err != nil {
+		slog.Error("failed to update player's balance!", "err", err)
+		return
+	}
+
+	wrapper.Player.CoinDoubler = newCoinDoubler
+}
+
+// --- Buy coin booster --- //
+
+func (c *ClientBuyCoinBooster) UnmarshalStream(stream *core.ByteStream) {}
+
+func (c *ClientBuyCoinBooster) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
+	newBalance := wrapper.Player.Wallet[config.CurrencyGems].Balance - config.CoinBoosterPrice
+	
+	if newBalance < 0 {
+		return
+	}
+	
+	now := time.Now().Unix()
+	newCoinBooster := wrapper.Player.CoinBooster + config.CoinBoosterReward
+	
+	if wrapper.Player.CoinBooster < int32(now) {
+		newCoinBooster = int32(now) + config.CoinBoosterReward
+	}
+	
+	if err := dbm.Exec("update players set coin_booster = $1 where id = $2", newCoinBooster, wrapper.Player.DbId); err != nil {
+		slog.Error("failed to update player's coin booster!", "err", err)
+		return
+	}
+	
+	if err := dbm.Exec("update player_wallet set balance = $1 where player_id = $2 and currency_id = $3", newBalance, wrapper.Player.DbId, config.CurrencyGems); err != nil {
+		slog.Error("failed to update player's balance!", "err", err)
+		return
+	}
+
+	wrapper.Player.CoinBooster = newCoinBooster
+}
+
+// --- Unlock skin --- //
+
+func (c *ClientUnlockSkinCommand) UnmarshalStream(stream *core.ByteStream) {
+	for i := 0; i < 4; i++ {
+		_, _ = stream.ReadVInt()
+	}
+
+	c.skin, _ = stream.ReadDataRef()
+}
+
+func (c *ClientUnlockSkinCommand) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
+	if wrapper.Player.State() != core.StateLoggedIn {
+		return
+	}
+
+	contains := false
+
+	for _, value := range csv.Skins() {
+		if value == c.skin.S {
+			contains = true
+			break
+		}
+	}
+
+	if !contains {
+		return
+	}
+
+	if csv.IsSkinDefault(c.skin.S) {
+		return
+	}
+	
+	brawler := csv.GetBrawlerForSkin(c.skin.S)
+	_, exists := wrapper.Player.Brawlers[brawler]
+	
+	if !exists {
+		return
+	}
+	
+	price := csv.GetSkinPrice(c.skin.S)
+	newBalance := wrapper.Player.Wallet[config.CurrencyGems].Balance - int64(price)
+	
+	if newBalance < 0 {
+		return
+	}
+	
+	if err := dbm.Exec("update player_wallet set balance = $1 where player_id = $2 and currency_id = $3", newBalance, wrapper.Player.DbId, config.CurrencyGems); err != nil {
+		slog.Error("failed to update player wallet!")
+		return
+	}
+	
+	wrapper.Player.Wallet[config.CurrencyGems].Balance = newBalance
+	wrapper.Player.Brawlers[brawler].UnlockedSkinIds = append(wrapper.Player.Brawlers[brawler].UnlockedSkinIds, c.skin.S)
+	wrapper.Player.Brawlers[brawler].SelectedSkinId = c.skin.S
+	
+	data, err := json.Marshal(wrapper.Player.Brawlers[brawler].UnlockedSkinIds)
+	
+	if err != nil {
+		slog.Error("failed to marshal unlocked skin ids!", "err", err)
+		return
+	}
+	
+	if err := dbm.Exec("update player_brawlers set unlocked_skins = $1, selected_skin = $2 where player_id = $3 and brawler_id = $4", data, wrapper.Player.Brawlers[brawler].SelectedSkinId, wrapper.Player.DbId, brawler); err != nil {
+		slog.Error("failed to update player's brawlers!")
+		return
+	}
+}
+
+// --- Select skin --- //
+
+func (c *ClientSelectSkinCommand) UnmarshalStream(stream *core.ByteStream) {
+	for i := 0; i < 4; i++ {
+		_, _ = stream.ReadVInt()
+	}
+
+	c.skin, _ = stream.ReadDataRef()
+}
+
+func (c *ClientSelectSkinCommand) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
+	brawler := csv.GetBrawlerForSkin(c.skin.S)
+	data, exists := wrapper.Player.Brawlers[brawler]
+	
+	if !exists {
+		return
+	}
+	
+	f := false
+	
+	for _, skin := range data.UnlockedSkinIds {
+		if skin == c.skin.S {
+			f = true
+			break
+		}
+	}
+	
+	if !f {
+		return
+	}
+	
+	if err := dbm.Exec("update player_brawlers set selected_skin = $1 where player_id = $2 and brawler_id = $3", c.skin.S, wrapper.Player.DbId, brawler); err != nil {
+		slog.Error("failed to update player's selected skin!")
+		return
+	}
+	
+	wrapper.Player.Brawlers[brawler].SelectedSkinId = c.skin.S
 }

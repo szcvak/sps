@@ -82,7 +82,7 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 	nonZeroSkins = make([]int32, 0, len(player.Brawlers)*2)
 
 	for _, data := range player.Brawlers {
-		for skin := range data.UnlockedSkinIds {
+		for _, skin := range data.UnlockedSkinIds {
 			if skin != 0 {
 				nonZeroSkins = append(nonZeroSkins, int32(skin))
 			}
@@ -161,8 +161,12 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 	stream.Write([]core.VInt{3, 10, 20, 60, 200, 500})
 	stream.Write([]core.VInt{0, 30, 80, 170, 0, 0})
 
+	// events
+	
 	em := core.GetEventManager()
-	em.Embed(stream)
+	em.Embed(stream, o.wrapper.Player)
+	
+	// end
 
 	stream.Write(core.VInt(config.MaximumUpgradeLevel))
 
