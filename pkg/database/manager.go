@@ -17,6 +17,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type LeaderboardPlayerEntry struct {
+	DbId         int64  `db:"id"`
+	Name         string `db:"name"`
+	Trophies     int32  `db:"trophies"`
+	ProfileIcon  int32  `db:"profile_icon"`
+	Region       string `db:"region"`
+	PlayerHighID int32  `db:"high_id"`
+	PlayerLowID  int32  `db:"low_id"`
+}
+
 type Manager struct {
 	pool *pgxpool.Pool
 }
@@ -1092,6 +1102,89 @@ func (m *Manager) CreateAlliance(ctx context.Context, name string, description s
 	slog.Info("created an alliance", "allianceId", newId)
 
 	return nil
+}
+
+func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int) ([]LeaderboardPlayerEntry, error) {
+	query := `
+        select
+            p.id, p.name, pp.trophies, p.profile_icon, p.region, p.high_id, p.low_id
+        from players p
+        join player_progression pp on p.id = pp.player_id
+        order by pp.trophies desc
+        limit $1`
+
+	rows, err := m.pool.Query(ctx, query, limit)
+
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	defer rows.Close()
+
+	entries := make([]LeaderboardPlayerEntry, 0, limit)
+
+	for rows.Next() {
+		var entry LeaderboardPlayerEntry
+
+		err = rows.Scan(
+			&entry.DbId, &entry.Name, &entry.Trophies, &entry.ProfileIcon, &entry.Region, &entry.PlayerHighID, &entry.PlayerLowID,
+		)
+
+		if err != nil {
+			slog.Error("scan failed", "error", err)
+			continue
+		}
+
+		entries = append(entries, entry)
+	}
+
+	if err = rows.Err(); err != nil {
+		return entries, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return entries, nil
+}
+
+func (m *Manager) GetBrawlerTrophyLeaderboard(ctx context.Context, brawlerId int32, limit int) ([]LeaderboardPlayerEntry, error) {
+	query := `
+        select
+            p.id, p.name, pb.trophies, p.profile_icon, p.region, p.high_id, p.low_id
+        from players p
+        join player_brawlers pb on p.id = pb.player_id
+        where pb.brawler_id = $1 and pb.trophies > 0
+        order by pb.trophies desc
+        limit $2`
+
+	rows, err := m.pool.Query(ctx, query, brawlerId, limit)
+
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	defer rows.Close()
+
+	entries := make([]LeaderboardPlayerEntry, 0, limit)
+
+	for rows.Next() {
+		var entry LeaderboardPlayerEntry
+
+		err = rows.Scan(
+			&entry.DbId, &entry.Name, &entry.Trophies, &entry.ProfileIcon, &entry.Region, &entry.PlayerHighID, &entry.PlayerLowID,
+		)
+
+		if err != nil {
+			slog.Error("scan failed", "error", err, "brawlerID", brawlerId)
+			continue
+		}
+
+		entries = append(entries, entry)
+	}
+
+	if err = rows.Err(); err != nil {
+		return entries, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return entries, nil
 }
 
 func reverseMessages(s []core.AllianceMessage) {
