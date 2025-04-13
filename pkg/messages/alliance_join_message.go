@@ -30,31 +30,17 @@ func (a *AllianceJoinMessage) Process(wrapper *core.ClientWrapper, dbm *database
 		return
 	}
 
-	err := dbm.Exec(
-		"update alliances set total_trophies = total_trophies + $1 where id = $2",
-		wrapper.Player.Trophies, a.allianceId + 1,
-	)
+	err := dbm.AddAllianceMember(context.Background(), wrapper.Player, int64(a.allianceId))
 	
 	if err != nil {
-		slog.Error("failed to update alliances!", "err", err)
+		slog.Error("failed to add alliance member!", "err", err)
 		return
 	}
 	
-	err = dbm.Exec(
-		"insert into alliance_members (alliance_id, player_id) values ($1, $2)",
-		a.allianceId + 1, wrapper.Player.DbId,
-	)
+	h := hub.GetHub()
+	h.UpdateAllianceMembership(wrapper, nil, wrapper.Player.AllianceId)
 	
-	if err != nil {
-		slog.Error("failed to update alliance_members!", "err", err)
-		return
-	}
-	
-	wrapper.Player.AllianceRole = 1
-	wrapper.Player.AllianceId = new(int64)
-	*wrapper.Player.AllianceId = int64(a.allianceId + 1)
-	
-	message, err := dbm.AddAllianceMessage(context.Background(), *wrapper.Player.AllianceId, wrapper.Player, 4, "", wrapper.Player)
+	message, err := dbm.AddAllianceMessage(context.Background(), *wrapper.Player.AllianceId, wrapper.Player, 43, "", wrapper.Player)
 	
 	if err != nil {
 		slog.Error("failed to send alliance message!", "err", err)
@@ -72,6 +58,5 @@ func (a *AllianceJoinMessage) Process(wrapper *core.ClientWrapper, dbm *database
 	
 	serverMsg := NewAllianceChatServerMessage(*message, *wrapper.Player.AllianceId)
 	
-	messageHub := hub.GetHub()
-	messageHub.BroadcastToAlliance(*wrapper.Player.AllianceId, serverMsg)
+	h.BroadcastToAlliance(*wrapper.Player.AllianceId, serverMsg)
 }

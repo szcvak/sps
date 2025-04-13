@@ -101,9 +101,9 @@ func (m *Manager) CreatePlayer(ctx context.Context, highId int32, lowId int32, n
 	var createdAt time.Time
 
 	playerInsertSQL := `
-		INSERT INTO players (name, token, high_id, low_id, region, last_login)
-		VALUES ($1, $2, $3, $4, $5, current_timestamp)
-		RETURNING id, created_at`
+		insert into players (name, token, high_id, low_id, region, last_login)
+		values ($1, $2, $3, $4, $5, current_timestamp)
+		returning id, created_at`
 
 	err = tx.QueryRow(ctx, playerInsertSQL, name, token, highId, lowId, region).Scan(&newPlayerId, &createdAt)
 
@@ -118,8 +118,8 @@ func (m *Manager) CreatePlayer(ctx context.Context, highId int32, lowId int32, n
 	}
 
 	progressionInsertSQL := `
-		INSERT INTO player_progression (player_id, trophies, highest_trophies, solo_victories, duo_victories, trio_victories)
-		VALUES ($1, $2, $2, 0, 0, 0)`
+		insert into player_progression (player_id, trophies, highest_trophies, solo_victories, duo_victories, trio_victories)
+		values ($1, $2, $2, 0, 0, 0)`
 
 	_, err = tx.Exec(ctx, progressionInsertSQL, newPlayerId, config.NewPlayerTrophies)
 
@@ -127,7 +127,7 @@ func (m *Manager) CreatePlayer(ctx context.Context, highId int32, lowId int32, n
 		return nil, fmt.Errorf("failed to insert player progression for player %d: %w", newPlayerId, err)
 	}
 
-	walletInsertSQL := `INSERT INTO player_wallet (player_id, currency_id, balance) VALUES ($1, $2, $3)`
+	walletInsertSQL := `insert into player_wallet (player_id, currency_id, balance) values ($1, $2, $3)`
 	newPlayerWallet := make(map[int32]*core.PlayerCurrency)
 
 	for _, currencyId := range config.DefaultCurrencies {
@@ -177,12 +177,12 @@ func (m *Manager) CreatePlayer(ctx context.Context, highId int32, lowId int32, n
 	}
 
 	brawlerInsertSQL := `
-		INSERT INTO player_brawlers (
+		insert into player_brawlers (
 			player_id, brawler_id, trophies, highest_trophies,
 			power_level, power_points,
 			unlocked_skins, selected_skin, cards
 		)
-		VALUES ($1, $2, 0, 0, 1, 0, $3, $4, $5)`
+		values ($1, $2, 0, 0, 1, 0, $3, $4, $5)`
 
 	_, err = tx.Exec(ctx, brawlerInsertSQL,
 		newPlayerId,
@@ -856,6 +856,240 @@ func (m *Manager) AddAllianceMessage(ctx context.Context, allianceId int64, send
 	}
 
 	return persistedMsg, nil
+}
+
+func (m *Manager) AddAllianceMember(ctx context.Context, player *core.Player, allianceId int64) error {
+	tx, err := m.pool.Begin(ctx)
+
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			_ = tx.Rollback(ctx)
+			panic(r)
+		}
+		
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+	
+	_, err = tx.Exec(
+		ctx,
+		"update alliances set total_trophies = total_trophies + $1 where id = $2",
+		player.Trophies, allianceId,
+	)
+	
+	if err != nil {
+		return fmt.Errorf("failed to increase alliance trophies: %w", err)
+	}
+	
+	_, err = tx.Exec(
+		ctx,
+		"insert into alliance_members (alliance_id, player_id) values ($1, $2)",
+		allianceId, player.DbId,
+	)
+	
+	if err != nil {
+		return fmt.Errorf("failed to insert into alliance_members: %w", err)
+	}
+	
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction for alliance member %d: %w", player.DbId, err)
+	}
+	
+	player.AllianceId = new(int64)
+	*player.AllianceId = allianceId
+	
+	player.AllianceRole = 1
+	
+	slog.Info("player joined an alliance", "playerId", player.DbId, "allianceId", allianceId)
+	
+	return nil
+}
+
+func (m *Manager) RemoveAllianceMember(ctx context.Context, player *core.Player, allianceId int64) (bool, error) {
+	tx, err := m.pool.Begin(ctx)
+
+	if err != nil {
+		return false, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+	
+	_, err = tx.Exec(
+		ctx,
+		"update alliances set total_trophies = total_trophies - $1 where id = $2",
+		player.Trophies, allianceId,
+	)
+	
+	if err != nil {
+		return false, fmt.Errorf("failed to decrease alliance trophies: %w", err)
+	}
+	
+	_, err = tx.Exec(
+		ctx,
+		"delete from alliance_members where player_id = $1",
+		player.DbId,
+	)
+	
+	if err != nil {
+		return false, fmt.Errorf("failed to delete member from alliance: %w", err)
+	}
+	
+	var members int32
+	
+	err = tx.QueryRow(
+		ctx,
+		"select count(*) from alliance_members where alliance_id = $1",
+		allianceId,
+	).Scan(&members)
+	
+	if err != nil {
+		return false, fmt.Errorf("failed to count members: %w", err)
+	}
+	
+	deleted := false
+	
+	if members <= 0 {
+		err = m.DeleteAlliance(ctx, allianceId, tx)
+		
+		if err != nil {
+			return false, fmt.Errorf("failed to delete alliance: %w", err)
+		}
+		
+		deleted = true
+	}
+	
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		return deleted, fmt.Errorf("failed to commit transaction for alliance member %d: %w", player.DbId, err)
+	}
+	
+	player.AllianceId = nil
+	player.AllianceRole = 0
+	
+	slog.Info("player left an alliance", "playerId", player.DbId, "allianceId", allianceId)
+	
+	return deleted, nil
+}
+
+func (m *Manager) DeleteAlliance(ctx context.Context, allianceId int64, tx pgx.Tx) error {
+	var err error
+	
+	newTx := false
+
+	if tx == nil {
+		tx, err = m.pool.Begin(ctx)
+		
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction for delete alliance: %w", err)
+		}
+		
+		newTx = true
+
+		defer func() {
+			r := recover()
+			
+			if err != nil || r != nil {
+				_ = tx.Rollback(ctx)
+				if r != nil { panic(r) }
+			}
+		}()
+	}
+	
+	_, err = tx.Exec(
+		ctx,
+		"delete from alliance_messages where alliance_id = $1",
+		allianceId,
+	)
+	
+	if err != nil {
+		return fmt.Errorf("failed to delete alliance messages: %w", err)
+	}
+	
+	_, err = tx.Exec(
+		ctx,
+		"delete from alliances where id = $1",
+		allianceId,
+	)
+	
+	if err != nil {
+		return fmt.Errorf("failed to delete alliance: %w", err)
+	}
+	
+	if newTx {
+		err = tx.Commit(ctx)
+	
+		if err != nil {
+			return fmt.Errorf("failed to commit transaction for alliance: %w", err)
+		}
+	}
+	
+	slog.Info("deleted an alliance", "allianceId", allianceId)
+	
+	return nil
+}
+
+func (m *Manager) CreateAlliance(ctx context.Context, name string, description string, badge int32, allianceType int32, requiredTrophies int32, creator *core.Player) error {
+	tx, err := m.pool.Begin(ctx)
+
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			_ = tx.Rollback(ctx)
+			panic(r)
+		}
+		
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+	
+	var newId int64
+	
+	err = tx.QueryRow(
+		ctx,
+		"insert into alliances (name, description, badge_id, type, required_trophies, total_trophies, creator_id) values ($1, $2, $3, $4, $5, $6, $7) returning id",
+		name, description, badge, allianceType, requiredTrophies, creator.Trophies, creator.DbId,
+	).Scan(&newId)
+	
+	if err != nil {
+		return fmt.Errorf("failed to create alliance: %w", err)
+	}
+	
+	_, err = tx.Exec(
+		ctx,
+		"insert into alliance_members (alliance_id, player_id, role) values ($1, $2, $3)",
+		newId, creator.DbId, 4,
+	)
+	
+	if err != nil {
+		return fmt.Errorf("failed to insert alliance member: %w", err)
+	}
+	
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	
+	creator.AllianceId = new(int64)
+	*creator.AllianceId = newId
+	
+	creator.AllianceRole = 4
+	
+	slog.Info("created an alliance", "allianceId", newId)
+	
+	return nil
 }
 
 func reverseMessages(s []core.AllianceMessage) {

@@ -53,7 +53,12 @@ func (c *ClanStreamMessage) Marshal() []byte {
 		stream.Write(core.VInt(0))
 	} else {
 		for _, msg := range msgs {
-			stream.Write(core.VInt(msg.Type))
+			if msg.Type == 43 || msg.Type == 44 {
+				stream.Write(core.VInt(4))
+			} else {
+				stream.Write(core.VInt(msg.Type))
+			}
+			
 			dispatchEntry(stream, msg)
 		}
 	}

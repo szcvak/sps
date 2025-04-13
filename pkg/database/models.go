@@ -11,7 +11,7 @@ const (
     name varchar(15) not null,
     
     high_id int not null,
-    low_id int not null,
+    low_id int not null unique,
     
     profile_icon int not null default 0,
     
