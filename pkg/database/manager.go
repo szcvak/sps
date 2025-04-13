@@ -475,7 +475,7 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 	if err = rowsWallet.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating wallet rows for player %d: %w", playerId, err)
 	}
-	
+
 	return player, nil
 }
 

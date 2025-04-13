@@ -281,7 +281,7 @@ func GetCardUnlock(card int32) int32 {
 		slog.Error("cards.csv has not been loaded yet!")
 		return 0
 	}
-	
+
 	data := ""
 
 	for line, row := range cardsCsv {
@@ -290,14 +290,14 @@ func GetCardUnlock(card int32) int32 {
 		}
 
 		data = row[3]
-		
+
 		if row[5] == "unlock" {
 			return int32(line)
 		}
-		
+
 		break
 	}
-	
+
 	for line, row := range cardsCsv {
 		if row[3] == data && row[5] == "unlock" {
 			return int32(line)
@@ -313,16 +313,16 @@ func GetBrawlerRarity(id int32) string {
 		slog.Error("cards.csv has not been loaded yet!")
 		return "common"
 	}
-	
+
 	rarity := "common"
-	
+
 	for line, row := range cardsCsv {
 		if int32(line) == id+1 {
 			rarity = row[10]
 			break
 		}
 	}
-	
+
 	return rarity
 }
 
@@ -485,14 +485,14 @@ func GetExperienceLevelForThumbnail(id int32) int32 {
 		slog.Error("player_thumbnails.csv has not been loaded yet!")
 		return 0
 	}
-	
+
 	if int(id) > len(thumbnailsCsv) {
 		slog.Error("thumbnail out of range")
 		return 0
 	}
-	
+
 	row, exists := thumbnailsCsv[int(id)]
-	
+
 	if !exists {
 		slog.Error("thumbnail does not exist")
 		return 0
@@ -546,26 +546,26 @@ func IsSkinDefault(id int32) bool {
 		slog.Error("characters.csv has not been loaded yet!")
 		return false
 	}
-	
+
 	if skinsCsv == nil {
 		slog.Error("skins.csv has not been loaded yet!")
 		return false
 	}
-	
+
 	defaultSkins := make(map[string]bool)
-	
+
 	for _, row := range charactersCsv {
 		defaultSkins[row[20]] = true
 	}
-	
+
 	if int(id) > len(skinsCsv) {
 		slog.Error("skin out of range")
 		return false
 	}
-	
+
 	name := skinsCsv[int(id)][0]
-	_, e :=defaultSkins[name]
-	
+	_, e := defaultSkins[name]
+
 	return e
 }
 
@@ -574,20 +574,20 @@ func GetSkinPrice(id int32) int32 {
 		slog.Error("skins.csv has not been loaded yet!")
 		return 0
 	}
-	
+
 	if int(id) > len(skinsCsv) {
 		return 0
 	}
 
 	row, exists := skinsCsv[int(id)]
-	
+
 	if !exists {
 		slog.Error("row does not exist!")
 		return 0
 	}
-	
+
 	price, err := strconv.Atoi(row[3])
-	
+
 	if err != nil {
 		slog.Error("failed to convert to int!", "err", err)
 		return 0
@@ -601,31 +601,31 @@ func GetBrawlerForSkin(id int32) int32 {
 		slog.Error("characters.csv has not been loaded yet!")
 		return 0
 	}
-	
+
 	if skinsCsv == nil {
 		slog.Error("skins.csv has not been loaded yet!")
 		return 0
 	}
-	
+
 	if int(id) > len(skinsCsv) {
 		slog.Error("skin out of range")
 		return 0
 	}
-	
+
 	row, exists := skinsCsv[int(id)]
-	
+
 	if !exists {
 		slog.Error("skin does not exist")
 		return 0
 	}
-	
+
 	character := row[1]
-	
+
 	for i, c := range charactersCsv {
 		if c[0] == character {
 			return int32(i)
 		}
 	}
-	
+
 	return 0
 }

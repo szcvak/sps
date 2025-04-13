@@ -279,9 +279,9 @@ func (em *EventManager) Embed(stream *ByteStream, player *Player) {
 		if timeLeft < 0 {
 			timeLeft = 1
 		}
-		
+
 		visionState := 1
-		
+
 		for _, id := range event.SeenBy {
 			if id == player.DbId {
 				visionState = 2

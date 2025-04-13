@@ -13,7 +13,7 @@ const (
 	// --- General configuration --- //
 
 	MaximumRank         = 20
-	MaximumUpgradeLevel = 5
+	MaximumUpgradeLevel = 6
 
 	// --- New brawler configuration --- //
 
@@ -25,9 +25,9 @@ const (
 	// --- New player configuration --- //
 
 	NewPlayerTrophies int32 = 0
-	
+
 	// --- Offer configuration --- //
-	
+
 	CoinBoosterPrice  int64 = 20
 	CoinBoosterReward int32 = 7 * 24 * 60 * 60
 

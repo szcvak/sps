@@ -18,7 +18,7 @@ func LoadAll() error {
 	if err := loadThumbnails(); err != nil {
 		return fmt.Errorf("failed to load thumbnails: %w\n", err)
 	}
-	
+
 	if err := loadSkins(); err != nil {
 		return fmt.Errorf("failed to load skins: %w\n", err)
 	}

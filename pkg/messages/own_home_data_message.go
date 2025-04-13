@@ -162,10 +162,10 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 	stream.Write([]core.VInt{0, 30, 80, 170, 0, 0})
 
 	// events
-	
+
 	em := core.GetEventManager()
 	em.Embed(stream, o.wrapper.Player)
-	
+
 	// end
 
 	stream.Write(core.VInt(config.MaximumUpgradeLevel))
