@@ -125,7 +125,7 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 
 	// end
 
-	stream.Write(core.VInt(0))
+	stream.Write(core.VInt(config.SeasonEndTime))
 	stream.Write(false)
 
 	stream.Write(core.LogicLong{0, 1})

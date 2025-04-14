@@ -14,6 +14,7 @@ const (
 
 	MaximumRank         = 20
 	MaximumUpgradeLevel = 6
+	SeasonEndTime       = 30 * 24 * 60 * 60
 
 	// --- New brawler configuration --- //
 

@@ -25,8 +25,6 @@ func (g *GetLeaderboardMessage) Unmarshal(data []byte) {
 	g.brawler, _ = stream.ReadDataRef()
 	
 	g.local = local == 1
-	
-	//g.brawler = core.DataRef{26, 0}
 }
 
 func (g *GetLeaderboardMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {

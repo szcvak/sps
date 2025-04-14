@@ -255,6 +255,10 @@ func (em *EventManager) GetCurrentEventPtr(slot int32) *ActiveEvent {
 	return &em.slotData[slot].currentEvent
 }
 
+func (em *EventManager) GetCurrentEvent(slot int32) ActiveEvent {
+	return em.slotData[slot].currentEvent
+}
+
 func (em *EventManager) Embed(stream *ByteStream, player *Player) {
 	em.mu.RLock()
 	defer em.mu.RUnlock()

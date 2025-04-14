@@ -262,7 +262,7 @@ func (l *LeaderboardMessage) allianceLeaderboard(stream *core.ByteStream) {
 	}
 	
 	stream.Write(core.VInt(0))
-	stream.Write(core.VInt(1))
+	stream.Write(core.VInt(0))
 	stream.Write(core.VInt(0))
 	stream.Write(core.VInt(0))
 	

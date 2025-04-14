@@ -28,4 +28,5 @@ func init() {
 	registerClientMessage(14308, func() messaging.ClientMessage { return messages.NewAllianceLeaveMessage() })
 	registerClientMessage(14301, func() messaging.ClientMessage { return messages.NewAllianceCreateMessage() })
 	registerClientMessage(14403, func() messaging.ClientMessage { return messages.NewGetLeaderboardMessage() })
+	registerClientMessage(14350, func() messaging.ClientMessage { return messages.NewTeamCreateMessage() })
 }
