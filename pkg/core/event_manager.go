@@ -39,7 +39,7 @@ type EventSlotSchedule struct {
 
 type ActiveEvent struct {
 	SlotIndex  int
-	LocationID int32
+	LocationId int32
 	StartTime  time.Time
 	EndTime    time.Time
 	Config     EventConfig
@@ -239,7 +239,7 @@ func (em *EventManager) rotateEventForSlot(slotIndex int, startTime time.Time) e
 
 	slot.currentEvent = ActiveEvent{
 		SlotIndex:  slotIndex,
-		LocationID: locationID,
+		LocationId: locationID,
 		StartTime:  startTime,
 		EndTime:    startTime.Add(schedule.Duration),
 		Config:     config,
@@ -306,7 +306,7 @@ func (em *EventManager) Embed(stream *ByteStream, player *Player) {
 		stream.Write(event.Config.DoubleCoins)
 		stream.Write(event.Config.DoubleExp)
 
-		stream.Write(ScId{15, event.LocationID})
+		stream.Write(ScId{15, event.LocationId})
 
 		stream.Write(VInt(0))
 		stream.Write(VInt(visionState)) // 1=new event, 2=seen

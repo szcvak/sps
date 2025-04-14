@@ -52,7 +52,7 @@ type Alliance struct {
 
 	Members      []AllianceMember
 	TotalMembers int32
-	
+
 	Region string
 }
 

@@ -72,7 +72,7 @@ func (a *AllianceDataMessage) Marshal() []byte {
 
 		stream.Write(member.Name)
 		stream.Write(core.VInt(member.Role))
-		
+
 		level := -1
 
 		for i := 0; i < len(core.RequiredExp)-1; i++ {

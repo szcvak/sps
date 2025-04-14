@@ -23,7 +23,7 @@ func (g *GetLeaderboardMessage) Unmarshal(data []byte) {
 	local, _ := stream.ReadVInt()
 	g.leaderboardType, _ = stream.ReadVInt()
 	g.brawler, _ = stream.ReadDataRef()
-	
+
 	g.local = local == 1
 }
 
@@ -33,7 +33,7 @@ func (g *GetLeaderboardMessage) Process(wrapper *core.ClientWrapper, dbm *databa
 	}
 
 	slog.Info("fetching leaderboard", "type", g.leaderboardType, "isLocal", g.local, "brawler", g.brawler)
-	
+
 	msg := NewLeaderboardMessage(wrapper, dbm, g)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 }

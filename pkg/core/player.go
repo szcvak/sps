@@ -65,6 +65,13 @@ type Player struct {
 	AllianceId   *int64 `db:"alliance_id"`
 	AllianceRole int16  `db:"alliance_role"`
 
+	TeamCode    *string `db:"team_code"`
+	TeamStatus  int16   `db:"status"`
+	TeamIsReady bool    `db:"is_ready"`
+
+	SelectedCardHigh int32 `db:"selected_card_high"`
+	SelectedCardLow  int32 `db:"selected_card_low"`
+
 	state PlayerState
 }
 

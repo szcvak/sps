@@ -4,9 +4,9 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/szcvak/sps/pkg/hub"
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
+	"github.com/szcvak/sps/pkg/hub"
 )
 
 type MyAllianceMessage struct {
@@ -45,7 +45,7 @@ func (m *MyAllianceMessage) Marshal() []byte {
 		slog.Error("failed to load alliance!", "err", err)
 		return stream.Buffer()
 	}
-	
+
 	h := hub.GetHub()
 	clients, exists := h.ClientsByAID[*m.wrapper.Player.AllianceId]
 

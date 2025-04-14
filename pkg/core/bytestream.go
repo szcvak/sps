@@ -497,7 +497,7 @@ func (b *ByteStream) Write(value interface{}) {
 	case byte:
 		b.WriteByte(v)
 	default:
-		slog.Warn("faled to write(x): unsupported type!", "value", v)
+		slog.Warn("faled to write(x): unsupported type!", "value", v, "type", fmt.Sprintf("%T", value))
 	}
 }
 

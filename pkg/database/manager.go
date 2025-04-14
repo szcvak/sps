@@ -8,24 +8,24 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/szcvak/sps/pkg/config"
 	"github.com/szcvak/sps/pkg/core"
 	"log/slog"
 	"os"
 	"time"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type LeaderboardPlayerEntry struct {
-	DbId         int64  `db:"id"`
-	Name         string `db:"name"`
-	Trophies     int32  `db:"trophies"`
-	ProfileIcon  int32  `db:"profile_icon"`
-	Region       string `db:"region"`
-	PlayerHighId int32  `db:"high_id"`
-	PlayerLowId  int32  `db:"low_id"`
-	AllianceId   *int64 `db:"alliance_id"`
-	PlayerExperience   int32  `db:"experience"`
+	DbId             int64  `db:"id"`
+	Name             string `db:"name"`
+	Trophies         int32  `db:"trophies"`
+	ProfileIcon      int32  `db:"profile_icon"`
+	Region           string `db:"region"`
+	PlayerHighId     int32  `db:"high_id"`
+	PlayerLowId      int32  `db:"low_id"`
+	AllianceId       *int64 `db:"alliance_id"`
+	PlayerExperience int32  `db:"experience"`
 }
 
 type LeaderboardAllianceEntry struct {
@@ -89,6 +89,8 @@ func (m *Manager) CreateDefault() error {
 		{"alliances", alliances},
 		{"alliance members", allianceMembers},
 		{"alliance messages", allianceMessages},
+		{"teams", teams},
+		{"team members", teamMembers},
 	}
 
 	for _, entry := range ddlStatements {
@@ -269,21 +271,28 @@ func (m *Manager) LoadPlayerByIds(ctx context.Context, high int32, low int32) (*
 	var allianceId sql.NullInt64
 	var allianceRole sql.NullInt16
 
+	var teamCode sql.NullString
+	var teamStatus sql.NullInt16
+	var teamIsReady sql.NullBool
+
 	// core/progression
 	stmt := `
 		select
-			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward, p.coin_doubler,
+			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward, p.coin_doubler, p.selected_card_high, p.selected_card_low,
 			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories, pp.experience,
-			am.alliance_id, am.role
+			am.alliance_id, am.role,
+			tm.team_code, tm.status, tm.is_ready
 		from players p
 		join player_progression pp on p.id = pp.player_id
 		left join alliance_members am on p.id = am.player_id
+		left join team_members tm on p.id = tm.player_id
 		where p.high_id = $1 and p.low_id = $2`
 
 	err = conn.QueryRow(ctx, stmt, high, low).Scan(
-		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward, &player.CoinDoubler,
+		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward, &player.CoinDoubler, &player.SelectedCardHigh, &player.SelectedCardLow,
 		&player.Trophies, &player.HighestTrophies, &player.SoloVictories, &player.DuoVictories, &player.TrioVictories, &player.Experience,
 		&allianceId, &allianceRole,
+		&teamCode, &teamStatus, &teamIsReady,
 	)
 
 	if err != nil {
@@ -304,6 +313,24 @@ func (m *Manager) LoadPlayerByIds(ctx context.Context, high int32, low int32) (*
 		player.AllianceRole = allianceRole.Int16
 	} else {
 		player.AllianceRole = 0
+	}
+
+	if teamCode.Valid {
+		player.TeamCode = &teamCode.String
+	} else {
+		player.TeamCode = nil
+	}
+
+	if teamStatus.Valid {
+		player.TeamStatus = teamStatus.Int16
+	} else {
+		player.TeamStatus = 0
+	}
+
+	if teamIsReady.Valid {
+		player.TeamIsReady = teamIsReady.Bool
+	} else {
+		player.TeamIsReady = false
 	}
 
 	playerId := player.DbId
@@ -391,21 +418,28 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 	var allianceId sql.NullInt64
 	var allianceRole sql.NullInt16
 
+	var teamCode sql.NullString
+	var teamStatus sql.NullInt16
+	var teamIsReady sql.NullBool
+
 	// core/progression
 	stmt := `
 		select
-			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward, p.coin_doubler,
+			p.id, p.control_mode, p.battle_hints, p.coin_booster, p.high_id, p.low_id, p.name, p.region, p.profile_icon, p.created_at, p.last_login, p.tutorial_state, p.coins_reward, p.coin_doubler, p.selected_card_high, p.selected_card_low,
 			pp.trophies, pp.highest_trophies, pp.solo_victories, pp.duo_victories, pp.trio_victories, pp.experience,
-			am.alliance_id, am.role
+			am.alliance_id, am.role,
+			tm.team_code, tm.status, tm.is_ready
 		from players p
 		join player_progression pp on p.id = pp.player_id
 		left join alliance_members am on p.id = am.player_id
+		left join team_members tm on p.id = tm.player_id
 		where p.token = $1`
 
 	err = conn.QueryRow(ctx, stmt, token).Scan(
-		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward, &player.CoinDoubler,
+		&player.DbId, &player.ControlMode, &player.BattleHints, &player.CoinBooster, &player.HighId, &player.LowId, &player.Name, &player.Region, &player.ProfileIcon, &player.CreatedAt, &player.LastLogin, &player.TutorialState, &player.CoinsReward, &player.CoinDoubler, &player.SelectedCardHigh, &player.SelectedCardLow,
 		&player.Trophies, &player.HighestTrophies, &player.SoloVictories, &player.DuoVictories, &player.TrioVictories, &player.Experience,
 		&allianceId, &allianceRole,
+		&teamCode, &teamStatus, &teamIsReady,
 	)
 
 	if err != nil {
@@ -426,6 +460,24 @@ func (m *Manager) LoadPlayerByToken(ctx context.Context, token string) (*core.Pl
 		player.AllianceRole = allianceRole.Int16
 	} else {
 		player.AllianceRole = 0
+	}
+
+	if teamCode.Valid {
+		player.TeamCode = &teamCode.String
+	} else {
+		player.TeamCode = nil
+	}
+
+	if teamStatus.Valid {
+		player.TeamStatus = teamStatus.Int16
+	} else {
+		player.TeamStatus = 0
+	}
+
+	if teamIsReady.Valid {
+		player.TeamIsReady = teamIsReady.Bool
+	} else {
+		player.TeamIsReady = false
 	}
 
 	playerId := player.DbId
@@ -1116,10 +1168,10 @@ func (m *Manager) CreateAlliance(ctx context.Context, name string, description s
 
 func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int, region *string) ([]LeaderboardPlayerEntry, error) {
 	query := ""
-	
+
 	var rows pgx.Rows
 	var err error
-	
+
 	if region == nil {
 		query = `
 	        select
@@ -1130,7 +1182,7 @@ func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int, reg
 	        left join alliance_members am on p.id = am.player_id
 	        order by pp.trophies desc
 	        limit $1`
-	
+
 		rows, err = m.pool.Query(ctx, query, limit)
 	} else {
 		query = `
@@ -1143,7 +1195,7 @@ func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int, reg
 			where p.region = $2
 	        order by pp.trophies desc
 	        limit $1`
-	
+
 		rows, err = m.pool.Query(ctx, query, limit, *region)
 	}
 
@@ -1167,7 +1219,7 @@ func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int, reg
 			slog.Error("scan failed", "error", err)
 			continue
 		}
-		
+
 		if allianceId.Valid {
 			entry.AllianceId = &allianceId.Int64
 		} else {
@@ -1186,10 +1238,10 @@ func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int, reg
 
 func (m *Manager) GetBrawlerTrophyLeaderboard(ctx context.Context, brawlerId int32, limit int, region *string) ([]LeaderboardPlayerEntry, error) {
 	query := ""
-	
+
 	var rows pgx.Rows
 	var err error
-	
+
 	if region == nil {
 		query = `
 	        select
@@ -1238,7 +1290,7 @@ func (m *Manager) GetBrawlerTrophyLeaderboard(ctx context.Context, brawlerId int
 			slog.Error("scan failed", "error", err, "brawlerID", brawlerId)
 			continue
 		}
-		
+
 		if allianceId.Valid {
 			entry.AllianceId = &allianceId.Int64
 		} else {
@@ -1257,10 +1309,10 @@ func (m *Manager) GetBrawlerTrophyLeaderboard(ctx context.Context, brawlerId int
 
 func (m *Manager) GetAllianceTrophyLeaderboard(ctx context.Context, limit int, region *string) ([]LeaderboardAllianceEntry, error) {
 	query := ""
-	
+
 	var rows pgx.Rows
 	var err error
-	
+
 	if region == nil {
 		query = `
 	        select
@@ -1305,7 +1357,6 @@ func (m *Manager) GetAllianceTrophyLeaderboard(ctx context.Context, limit int, r
 	for rows.Next() {
 		var entry LeaderboardAllianceEntry
 
-
 		err = rows.Scan(
 			&entry.DbId, &entry.Name, &entry.BadgeId, &entry.Type, &entry.TotalTrophies,
 			&entry.TotalMembers,
@@ -1315,7 +1366,7 @@ func (m *Manager) GetAllianceTrophyLeaderboard(ctx context.Context, limit int, r
 			slog.Error("scan failed", "err", err)
 			continue
 		}
-		
+
 		entries = append(entries, entry)
 	}
 
@@ -1324,6 +1375,153 @@ func (m *Manager) GetAllianceTrophyLeaderboard(ctx context.Context, limit int, r
 	}
 
 	return entries, nil
+}
+
+func (m *Manager) LoadTeam(ctx context.Context, code string) (*core.Team, error) {
+	conn, err := m.pool.Acquire(ctx)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire connection: %w", err)
+	}
+
+	defer conn.Release()
+
+	t := core.NewTeam(code)
+
+	stmt := `
+        select
+            id, is_practice, total_members
+        from teams
+        where code = $1`
+
+	err = conn.QueryRow(ctx, stmt, code).Scan(
+		&t.DbId, &t.IsPractice, &t.TotalMembers,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query team core data for team %s: %w", code, err)
+	}
+
+	stmt = `
+        select
+            t.player_id, t.is_creator, t.status, t.is_ready,
+            p.selected_card_high, p.selected_card_low,
+            pb.selected_skin
+        from team_members t
+        join players p on p.id = t.player_id
+        left join player_brawlers pb on p.id = pb.player_id and p.selected_card_low = pb.brawler_id
+        where team_code = $1`
+
+	rows, err := conn.Query(ctx, stmt, code)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	t.Members = make([]*core.Player, 0)
+
+	for rows.Next() {
+		member := core.NewPlayer()
+
+		var isCreator bool
+		var selectedSkin sql.NullInt32
+
+		err = rows.Scan(
+			&member.DbId,
+			&isCreator,
+			&member.TeamStatus,
+			&member.TeamIsReady,
+			&member.SelectedCardHigh,
+			&member.SelectedCardLow,
+			&selectedSkin,
+		)
+
+		if err != nil {
+			slog.Error("failed to scan team member row, skipping", "teamCode", code, "err", err)
+			continue
+		}
+
+		skin := int32(0)
+
+		if selectedSkin.Valid {
+			skin = selectedSkin.Int32
+		}
+
+		member.Brawlers[member.SelectedCardLow] = &core.PlayerBrawler{
+			BrawlerId:         0,
+			Trophies:          0,
+			HighestTrophies:   0,
+			PowerLevel:        0,
+			PowerPoints:       0,
+			SelectedGadget:    nil,
+			SelectedStarPower: nil,
+			SelectedGear1:     nil,
+			SelectedGear2:     nil,
+			UnlockedSkinIds:   nil,
+			Cards:             nil,
+			SelectedSkinId:    skin,
+		}
+
+		t.Members = append(t.Members, member)
+
+		if isCreator {
+			t.Creator = member
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return t, nil
+}
+
+func (m *Manager) CreateTeam(ctx context.Context, code string, creator *core.Player) error {
+	tx, err := m.pool.Begin(ctx)
+
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			_ = tx.Rollback(ctx)
+			panic(r)
+		}
+
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	_, err = tx.Exec(ctx, "insert into teams (code) values ($1)", code)
+
+	if err != nil {
+		return fmt.Errorf("failed to create team: %w", err)
+	}
+
+	_, err = tx.Exec(
+		ctx,
+		"insert into team_members (team_code, player_id, is_creator) values ($1, $2, $3)",
+		code, creator.DbId, true,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to insert team member: %w", err)
+	}
+
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	creator.TeamCode = new(string)
+	*creator.TeamCode = code
+
+	return nil
 }
 
 func reverseMessages(s []core.AllianceMessage) {

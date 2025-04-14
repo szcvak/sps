@@ -5,7 +5,7 @@ import "errors"
 // --- Database tables --- //
 
 const (
-	players = `CREATE TABLE IF NOT EXISTS players (
+	players = `create table if not exists players (
 	id bigserial primary key,
     
     name varchar(15) not null,
@@ -25,12 +25,15 @@ const (
 	coin_booster int not null default 0,
 	coin_doubler int not null default 0,
 	coins_reward int not null default 0,
+	
+	selected_card_high int not null default 16,
+	selected_card_low int not null default 0,
 
     created_at timestamptz not null default current_timestamp,
     last_login timestamptz not null default current_timestamp
 );`
 
-	playerProgression = `CREATE TABLE IF NOT EXISTS player_progression (
+	playerProgression = `create table if not exists player_progression (
 	player_id bigint primary key references players (id) on delete cascade,
 	
 	solo_victories int not null default 0,
@@ -43,7 +46,7 @@ const (
 	experience int not null default 0
 );`
 
-	playerBrawlers = `CREATE TABLE IF NOT EXISTS player_brawlers (
+	playerBrawlers = `create table if not exists player_brawlers (
 	player_id bigint references players (id) on delete cascade,
 	brawler_id int not null,
 	
@@ -68,7 +71,7 @@ const (
 	primary key (player_id, brawler_id)
 );`
 
-	playerUnlockedStarPowers = `CREATE TABLE IF NOT EXISTS player_unlocked_star_powers (
+	playerUnlockedStarPowers = `create table if not exists player_unlocked_star_powers (
 	player_id bigint references players (id) on delete cascade,
 	brawler_id int not null,
 	star_power_id int not null,
@@ -79,7 +82,7 @@ const (
 	foreign key (player_id, brawler_id) references player_brawlers (player_id, brawler_id) on delete cascade
 );`
 
-	playerUnlockedGadgets = `CREATE TABLE IF NOT EXISTS player_unlocked_gadgets (
+	playerUnlockedGadgets = `create table if not exists player_unlocked_gadgets (
 	player_id bigint references players (id) on delete cascade,
 	brawler_id int not null,
 	gadget_id int not null,
@@ -90,7 +93,7 @@ const (
 	foreign key (player_id, brawler_id) references player_brawlers (player_id, brawler_id) on delete cascade
 );`
 
-	playerUnlockedGears = `CREATE TABLE IF NOT EXISTS player_unlocked_gears (
+	playerUnlockedGears = `create table if not exists player_unlocked_gears (
 	player_id bigint references players (id) on delete cascade,
 	brawler_id int not null,
 	gear_id int not null,
@@ -101,7 +104,7 @@ const (
 	foreign key (player_id, brawler_id) references player_brawlers (player_id, brawler_id) on delete cascade
 );`
 
-	playerWallet = `CREATE TABLE IF NOT EXISTS player_wallet (
+	playerWallet = `create table if not exists player_wallet (
 	player_id bigint references players (id) on delete cascade,
 	currency_id int not null,
 	
@@ -110,7 +113,7 @@ const (
 	primary key (player_id, currency_id)
 );`
 
-	alliances = `CREATE TABLE IF NOT EXISTS alliances (
+	alliances = `create table if not exists alliances (
     id bigserial primary key,
 
     name varchar(30) not null unique,
@@ -128,7 +131,7 @@ const (
     creator_id bigint references players (id) on delete set null
 );`
 
-	allianceMembers = `CREATE TABLE IF NOT EXISTS alliance_members (
+	allianceMembers = `create table if not exists alliance_members (
     alliance_id bigint references alliances (id) on delete cascade,
     player_id bigint references players (id) on delete cascade,
 
@@ -138,7 +141,7 @@ const (
     primary key (alliance_id, player_id)
 );`
 
-	allianceMessages = `CREATE TABLE IF NOT EXISTS alliance_messages (
+	allianceMessages = `create table if not exists alliance_messages (
     id bigserial primary key,
     alliance_id bigint references alliances (id) on delete cascade not null,
     player_id bigint references players (id) on delete set null,
@@ -156,6 +159,29 @@ const (
     target_name varchar(15) default null,
 
     created_at timestamptz not null default current_timestamp
+);`
+
+	teams = `create table if not exists teams (
+    id bigserial primary key,
+    code text unique,
+    
+    is_practice boolean not null default false,
+    total_members int not null default 1,
+    
+    created_at timestamptz not null default current_timestamp
+);`
+
+	teamMembers = `create table if not exists team_members (
+    team_code text references teams (code) on delete cascade,
+    player_id bigint references players (id) on delete cascade,
+
+    is_creator boolean not null default false,
+    status smallint not null default 0,
+    is_ready boolean not null default false,
+    
+    joined_at timestamptz not null default current_timestamp,
+
+    primary key (team_code, player_id)
 );`
 )
 
