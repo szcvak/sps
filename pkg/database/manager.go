@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"os"
 	"time"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,8 +22,19 @@ type LeaderboardPlayerEntry struct {
 	Trophies     int32  `db:"trophies"`
 	ProfileIcon  int32  `db:"profile_icon"`
 	Region       string `db:"region"`
-	PlayerHighID int32  `db:"high_id"`
-	PlayerLowID  int32  `db:"low_id"`
+	PlayerHighId int32  `db:"high_id"`
+	PlayerLowId  int32  `db:"low_id"`
+	AllianceId   *int64 `db:"alliance_id"`
+	PlayerExperience   int32  `db:"experience"`
+}
+
+type LeaderboardAllianceEntry struct {
+	DbId          int64  `db:"id"`
+	Name          string `db:"name"`
+	BadgeId       int32  `db:"badge_id"`
+	Type          int16  `db:"type"`
+	TotalTrophies int32  `db:"total_trophies"`
+	TotalMembers  int32
 }
 
 type Manager struct {
@@ -511,7 +521,7 @@ func (m *Manager) LoadAlliance(ctx context.Context, allianceId int64) (*core.All
 	stmt := `
         select
             name, description, badge_id, type, required_trophies,
-            total_trophies, creator_id
+            total_trophies, creator_id, region
         from alliances
         where id = $1`
 
@@ -519,7 +529,7 @@ func (m *Manager) LoadAlliance(ctx context.Context, allianceId int64) (*core.All
 
 	err = conn.QueryRow(ctx, stmt, allianceId).Scan(
 		&a.Name, &a.Description, &a.BadgeId, &a.Type, &a.RequiredTrophies,
-		&a.TotalTrophies, &creatorId,
+		&a.TotalTrophies, &creatorId, &a.Region,
 	)
 
 	if err != nil {
@@ -594,7 +604,7 @@ func (m *Manager) GetAlliances(ctx context.Context) ([]*core.Alliance, error) {
 		select
 			a.id, a.name, a.description, a.badge_id, a.type,
 			a.required_trophies, a.total_trophies,
-			a.creator_id,
+			a.creator_id, a.region,
 			coalesce(mc.member_count, 0) as current_member_count
 		from alliances a
 		left join (
@@ -633,6 +643,7 @@ func (m *Manager) GetAlliances(ctx context.Context) ([]*core.Alliance, error) {
 			&a.RequiredTrophies,
 			&a.TotalTrophies,
 			&creatorId,
+			&a.Region,
 			&memberCount,
 		)
 
@@ -1070,9 +1081,8 @@ func (m *Manager) CreateAlliance(ctx context.Context, name string, description s
 
 	err = tx.QueryRow(
 		ctx,
-		"insert into alliances (name, description, badge_id, type, required_trophies, total_trophies, creator_id) values ($1, $2, $3, $4, $5, $6, $7) returning id",
-		name, description, badge, allianceType, requiredTrophies, creator.Trophies, creator.DbId,
-	).Scan(&newId)
+		"insert into alliances (name, description, badge_id, type, required_trophies, total_trophies, creator_id, region) values ($1, $2, $3, $4, $5, $6, $7, $8) returning id",
+		name, description, badge, allianceType, requiredTrophies, creator.Trophies, creator.DbId, creator.Region).Scan(&newId)
 
 	if err != nil {
 		return fmt.Errorf("failed to create alliance: %w", err)
@@ -1081,7 +1091,7 @@ func (m *Manager) CreateAlliance(ctx context.Context, name string, description s
 	_, err = tx.Exec(
 		ctx,
 		"insert into alliance_members (alliance_id, player_id, role) values ($1, $2, $3)",
-		newId, creator.DbId, 4,
+		newId, creator.DbId, 2,
 	)
 
 	if err != nil {
@@ -1104,16 +1114,38 @@ func (m *Manager) CreateAlliance(ctx context.Context, name string, description s
 	return nil
 }
 
-func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int) ([]LeaderboardPlayerEntry, error) {
-	query := `
-        select
-            p.id, p.name, pp.trophies, p.profile_icon, p.region, p.high_id, p.low_id
-        from players p
-        join player_progression pp on p.id = pp.player_id
-        order by pp.trophies desc
-        limit $1`
-
-	rows, err := m.pool.Query(ctx, query, limit)
+func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int, region *string) ([]LeaderboardPlayerEntry, error) {
+	query := ""
+	
+	var rows pgx.Rows
+	var err error
+	
+	if region == nil {
+		query = `
+	        select
+	            p.id, p.name, pp.trophies, p.profile_icon, p.region, p.high_id, p.low_id, pp.experience,
+	            am.alliance_id
+	        from players p
+	        join player_progression pp on p.id = pp.player_id
+	        left join alliance_members am on p.id = am.player_id
+	        order by pp.trophies desc
+	        limit $1`
+	
+		rows, err = m.pool.Query(ctx, query, limit)
+	} else {
+		query = `
+	        select
+	            p.id, p.name, pp.trophies, p.profile_icon, p.region, p.high_id, p.low_id, pp.experience,
+	            am.alliance_id
+	        from players p
+	        join player_progression pp on p.id = pp.player_id
+	        left join alliance_members am on p.id = am.player_id
+			where p.region = $2
+	        order by pp.trophies desc
+	        limit $1`
+	
+		rows, err = m.pool.Query(ctx, query, limit, *region)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
@@ -1125,14 +1157,21 @@ func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int) ([]
 
 	for rows.Next() {
 		var entry LeaderboardPlayerEntry
+		var allianceId sql.NullInt64
 
 		err = rows.Scan(
-			&entry.DbId, &entry.Name, &entry.Trophies, &entry.ProfileIcon, &entry.Region, &entry.PlayerHighID, &entry.PlayerLowID,
+			&entry.DbId, &entry.Name, &entry.Trophies, &entry.ProfileIcon, &entry.Region, &entry.PlayerHighId, &entry.PlayerLowId, &entry.PlayerExperience, &allianceId,
 		)
 
 		if err != nil {
 			slog.Error("scan failed", "error", err)
 			continue
+		}
+		
+		if allianceId.Valid {
+			entry.AllianceId = &allianceId.Int64
+		} else {
+			entry.AllianceId = nil
 		}
 
 		entries = append(entries, entry)
@@ -1145,17 +1184,39 @@ func (m *Manager) GetPlayerTrophyLeaderboard(ctx context.Context, limit int) ([]
 	return entries, nil
 }
 
-func (m *Manager) GetBrawlerTrophyLeaderboard(ctx context.Context, brawlerId int32, limit int) ([]LeaderboardPlayerEntry, error) {
-	query := `
-        select
-            p.id, p.name, pb.trophies, p.profile_icon, p.region, p.high_id, p.low_id
-        from players p
-        join player_brawlers pb on p.id = pb.player_id
-        where pb.brawler_id = $1 and pb.trophies > 0
-        order by pb.trophies desc
-        limit $2`
-
-	rows, err := m.pool.Query(ctx, query, brawlerId, limit)
+func (m *Manager) GetBrawlerTrophyLeaderboard(ctx context.Context, brawlerId int32, limit int, region *string) ([]LeaderboardPlayerEntry, error) {
+	query := ""
+	
+	var rows pgx.Rows
+	var err error
+	
+	if region == nil {
+		query = `
+	        select
+	            p.id, p.name, pb.trophies, p.profile_icon, p.region, p.high_id, p.low_id, pp.experience,
+	            am.alliance_id
+	        from players p
+	        join player_brawlers pb on p.id = pb.player_id
+	        join player_progression pp on p.id = pp.player_id
+	        left join alliance_members am on p.id = am.player_id
+	        where pb.brawler_id = $1
+	        order by pb.trophies desc
+	        limit $2`
+		rows, err = m.pool.Query(ctx, query, brawlerId, limit)
+	} else {
+		query = `
+	        select
+	            p.id, p.name, pb.trophies, p.profile_icon, p.region, p.high_id, p.low_id, pp.experience,
+	            am.alliance_id
+	        from players p
+	        join player_brawlers pb on p.id = pb.player_id
+	        join player_progression pp on p.id = pp.player_id
+	        left join alliance_members am on p.id = am.player_id
+	        where pb.brawler_id = $1 and p.region = $3
+	        order by pb.trophies desc
+	        limit $2`
+		rows, err = m.pool.Query(ctx, query, brawlerId, limit, *region)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
@@ -1167,16 +1228,94 @@ func (m *Manager) GetBrawlerTrophyLeaderboard(ctx context.Context, brawlerId int
 
 	for rows.Next() {
 		var entry LeaderboardPlayerEntry
+		var allianceId sql.NullInt64
 
 		err = rows.Scan(
-			&entry.DbId, &entry.Name, &entry.Trophies, &entry.ProfileIcon, &entry.Region, &entry.PlayerHighID, &entry.PlayerLowID,
+			&entry.DbId, &entry.Name, &entry.Trophies, &entry.ProfileIcon, &entry.Region, &entry.PlayerHighId, &entry.PlayerLowId, &entry.PlayerExperience, &allianceId,
 		)
 
 		if err != nil {
 			slog.Error("scan failed", "error", err, "brawlerID", brawlerId)
 			continue
 		}
+		
+		if allianceId.Valid {
+			entry.AllianceId = &allianceId.Int64
+		} else {
+			entry.AllianceId = nil
+		}
 
+		entries = append(entries, entry)
+	}
+
+	if err = rows.Err(); err != nil {
+		return entries, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return entries, nil
+}
+
+func (m *Manager) GetAllianceTrophyLeaderboard(ctx context.Context, limit int, region *string) ([]LeaderboardAllianceEntry, error) {
+	query := ""
+	
+	var rows pgx.Rows
+	var err error
+	
+	if region == nil {
+		query = `
+	        select
+				a.id, a.name, a.badge_id, a.type,
+				a.total_trophies,
+				coalesce(mc.member_count, 0) as current_member_count
+			from alliances a
+			left join (
+				select alliance_id, count(*) as member_count
+				from alliance_members
+				group by alliance_id
+			) mc on a.id = mc.alliance_id
+			order by a.total_trophies
+			limit $1`
+		rows, err = m.pool.Query(ctx, query, limit)
+	} else {
+		query = `
+	        select
+				a.id, a.name, a.badge_id, a.type,
+				a.total_trophies,
+				coalesce(mc.member_count, 0) as current_member_count
+			from alliances a
+			left join (
+				select alliance_id, count(*) as member_count
+				from alliance_members
+				group by alliance_id
+			) mc on a.id = mc.alliance_id
+			where a.region = $2
+			order by a.total_trophies
+			limit $1`
+		rows, err = m.pool.Query(ctx, query, limit, *region)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	defer rows.Close()
+
+	entries := make([]LeaderboardAllianceEntry, 0, limit)
+
+	for rows.Next() {
+		var entry LeaderboardAllianceEntry
+
+
+		err = rows.Scan(
+			&entry.DbId, &entry.Name, &entry.BadgeId, &entry.Type, &entry.TotalTrophies,
+			&entry.TotalMembers,
+		)
+
+		if err != nil {
+			slog.Error("scan failed", "err", err)
+			continue
+		}
+		
 		entries = append(entries, entry)
 	}
 

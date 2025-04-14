@@ -63,7 +63,7 @@ func (p *ProfileMessage) Marshal() []byte {
 			}
 		}
 
-		stream.Write(core.VInt(powerLevel - 1))
+		stream.Write(core.VInt(powerLevel))
 	}
 
 	// stats

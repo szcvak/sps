@@ -45,12 +45,12 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 		brawlerTrophies = progressStart[33] + 50*(config.MaximumRank-1)
 	}
 
-	stream.Write(core.VInt(2017189)) // timestamp
+	stream.Write(core.VInt(2025111)) // timestamp
 	stream.Write(core.VInt(10))      // new band timer
 
 	stream.Write(core.VInt(player.Trophies))
 	stream.Write(core.VInt(player.HighestTrophies))
-	stream.Write(core.VInt(0))
+	stream.Write(core.VInt(player.Experience))
 	stream.Write(core.VInt(player.Experience))
 
 	stream.Write(core.ScId{28, player.ProfileIcon})
@@ -265,7 +265,7 @@ func (o *OwnHomeDataMessage) Marshal() []byte {
 
 	stream.Write(core.VInt(player.TutorialState))
 
-	stream.Write(core.VInt(2017189))
+	stream.Write(core.VInt(2025111))
 
 	player.CoinsReward = 0
 

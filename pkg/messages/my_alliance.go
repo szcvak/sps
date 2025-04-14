@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/szcvak/sps/pkg/hub"
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
 )
@@ -44,8 +45,17 @@ func (m *MyAllianceMessage) Marshal() []byte {
 		slog.Error("failed to load alliance!", "err", err)
 		return stream.Buffer()
 	}
+	
+	h := hub.GetHub()
+	clients, exists := h.ClientsByAID[*m.wrapper.Player.AllianceId]
 
-	stream.Write(core.VInt(1)) // online members
+	if !exists {
+		clients = make(map[*core.ClientWrapper]bool)
+	}
+
+	online := len(clients)
+
+	stream.Write(core.VInt(online))
 	stream.Write(true)
 	stream.Write(core.DataRef{25, int32(m.wrapper.Player.AllianceRole)})
 	stream.Write(0)
@@ -53,7 +63,7 @@ func (m *MyAllianceMessage) Marshal() []byte {
 	stream.Write(a.Name)
 	stream.Write(core.DataRef{8, a.BadgeId})
 	stream.Write(core.VInt(a.Type))
-	stream.Write(core.VInt(1)) // online members
+	stream.Write(core.VInt(online))
 	stream.Write(core.VInt(a.TotalTrophies))
 	stream.Write(core.DataRef{0, 1})
 	stream.Write(core.VInt(a.TotalMembers))

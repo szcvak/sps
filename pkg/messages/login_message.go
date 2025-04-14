@@ -70,7 +70,7 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 	if !l.Unmarshalled() {
 		return
 	}
-
+	
 	player, err := dbm.LoadPlayerByToken(context.Background(), l.Token)
 	isNew := false
 
@@ -110,6 +110,7 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 	}
 
 	player.SetState(core.StateLogin)
+	
 	wrapper.Player = player
 
 	hub.GetHub().AddClient(wrapper)

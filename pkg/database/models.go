@@ -121,6 +121,8 @@ const (
 	
     required_trophies int not null default 0,
     total_trophies int not null default 0,
+	
+	region text not null,
 
     created_at timestamptz not null default current_timestamp,
     creator_id bigint references players (id) on delete set null
