@@ -1,7 +1,6 @@
 package messages
 
 import (
-	"context"
 	"log/slog"
 
 	"github.com/szcvak/sps/pkg/core"
@@ -27,31 +26,25 @@ func (t *TeamCreateMessage) Unmarshal(data []byte) {
 
 func (t *TeamCreateMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
 	if t.event < 1 || t.event > 4 {
+		slog.Error("invalid event!", "event", t.event)
 		return
 	}
 
-	if wrapper.Player.TeamCode != nil {
-		slog.Info("player is already in team", "playerId", wrapper.Player.DbId, "teamCode", *wrapper.Player.TeamCode)
+	if wrapper.Player.TeamId != nil {
+		slog.Error("can't create team, player is already in a team", "playerId", wrapper.Player.DbId, "teamId", *wrapper.Player.TeamId)
 		return
 	}
 
-	em := core.GetEventManager()
-	event := em.GetCurrentEvent(int32(t.event - 1))
-
-	if event.Config.Gamemode == core.GameModeShowdown {
+	tm := core.GetTeamManager()
+	tm.CreateTeam(wrapper, int32(t.event))
+	
+	if wrapper.Player.TeamId == nil {
+		slog.Error("failed to create team!")
 		return
 	}
+	
+	slog.Info("created team", "type", t.teamType, "event", t.event, "teamId", *wrapper.Player.TeamId)
 
-	code := core.GenerateTeamCode()
-	err := dbm.CreateTeam(context.Background(), code, wrapper.Player)
-
-	if err != nil {
-		slog.Error("failed to create team!", "err", err)
-		return
-	}
-
-	slog.Info("created team", "type", t.teamType, "event", t.event, "code", code)
-
-	msg := NewTeamMessage(wrapper, dbm, int32(t.event))
+	msg := NewTeamMessage(wrapper)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 }

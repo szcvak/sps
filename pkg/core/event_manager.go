@@ -30,6 +30,7 @@ type EventConfig struct {
 	EventText        string
 	DoubleCoins      bool
 	DoubleExp        bool
+	MaxPlayers       int32
 }
 
 type EventSlotSchedule struct {
@@ -87,7 +88,7 @@ func InitEventManager(schedules [NumEventSlots]EventSlotSchedule) {
 				allIds := csv.LocationIds()
 
 				if len(allIds) == 0 {
-					slog.Error("Cannot get any locations, even fallback failed!")
+					slog.Error("Cannot get any locations, fallback failed!")
 					return []int32{0}
 				}
 
@@ -136,27 +137,27 @@ func DefaultSchedules() [NumEventSlots]EventSlotSchedule {
 	return [NumEventSlots]EventSlotSchedule{
 		{
 			Configs: []EventConfig{
-				{Gamemode: GameModeShowdown, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Solo Showdown"},
-				{Gamemode: GameModeGemGrab, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Gem Grab"},
+				{Gamemode: GameModeShowdown, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Solo Showdown", MaxPlayers: 1},
+				{Gamemode: GameModeGemGrab, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Gem Grab", MaxPlayers: 3},
 			},
 			Duration: 2 * time.Hour,
 		},
 		{
 			Configs: []EventConfig{
-				{Gamemode: GameModeBrawlBall, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Brawl Ball", DoubleExp: true},
+				{Gamemode: GameModeBrawlBall, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Brawl Ball", DoubleExp: true, MaxPlayers: 3},
 			},
 			Duration: 1 * time.Hour,
 		},
 		{
 			Configs: []EventConfig{
-				{Gamemode: GameModeHeist, RequiredBrawlers: 0, CoinsToClaim: 100, BonusCoins: 0, CoinsToWin: 100, EventText: "Heist", DoubleCoins: true},
-				{Gamemode: GameModeBounty, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Bounty"},
+				{Gamemode: GameModeHeist, RequiredBrawlers: 0, CoinsToClaim: 100, BonusCoins: 0, CoinsToWin: 100, EventText: "Heist", DoubleCoins: true, MaxPlayers: 3},
+				{Gamemode: GameModeBounty, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Bounty", MaxPlayers: 3},
 			},
 			Duration: 3 * time.Hour,
 		},
 		{
 			Configs: []EventConfig{
-				{Gamemode: GameModeShowdown, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Solo Showdown"},
+				{Gamemode: GameModeShowdown, RequiredBrawlers: 0, CoinsToClaim: 0, BonusCoins: 0, CoinsToWin: 100, EventText: "Solo Showdown", MaxPlayers: 3},
 			},
 			Duration: 4 * time.Hour,
 		},

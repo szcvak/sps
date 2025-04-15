@@ -20,6 +20,8 @@ func main() {
 	}
 
 	core.InitEventManager(core.DefaultSchedules())
+	core.InitTeamManager()
+	
 	hub.InitHub()
 
 	dbm, err := database.NewManager()

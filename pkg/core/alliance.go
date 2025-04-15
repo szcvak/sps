@@ -34,6 +34,7 @@ type AllianceMember struct {
 
 	ProfileIcon int32
 	LowId       int32
+	HighId      int32
 }
 
 type Alliance struct {

@@ -23,18 +23,24 @@ func (t *TeamChangeMemberSettingsMessage) Unmarshal(data []byte) {
 }
 
 func (t *TeamChangeMemberSettingsMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manager) {
-	slog.Info("changed card", "h", t.card.F, "l", t.card.S)
+	if wrapper.Player.TeamId == nil {
+		return
+	}
+	
+	slog.Info("changed brawler in team", "h", t.card.F, "l", t.card.S)
 
 	wrapper.Player.SelectedCardHigh = t.card.F
 	wrapper.Player.SelectedCardLow = t.card.S
-
-	err := dbm.Exec("update players set selected_card_high = $1, selected_card_low = $2 where id = $3", t.card.F, t.card.S, wrapper.Player.DbId)
-
-	if err != nil {
-		slog.Error("failed to update player's card!", "err", err)
-		return
+	
+	tm := core.GetTeamManager()
+	tm.UpdateBrawler(wrapper.Player)
+	
+	for _, member := range tm.Teams[*wrapper.Player.TeamId].Members {
+		if member.Wrapper != nil {
+			msg := NewTeamMessage(member.Wrapper)
+			payload := msg.Marshal()
+		
+			member.Wrapper.Send(msg.PacketId(), msg.PacketVersion(), payload)
+		}
 	}
-
-	msg := NewTeamMessage(wrapper, dbm, 2)
-	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
-	"github.com/szcvak/sps/pkg/hub"
 )
 
 type AllianceDataMessage struct {
@@ -41,15 +40,6 @@ func (a *AllianceDataMessage) Marshal() []byte {
 		return stream.Buffer()
 	}
 
-	h := hub.GetHub()
-	clients, exists := h.ClientsByAID[alliance.Id]
-
-	if !exists {
-		clients = make(map[*core.ClientWrapper]bool)
-	}
-
-	online := len(clients)
-
 	stream.Write(0)
 	stream.Write(int32(alliance.Id))
 
@@ -57,17 +47,18 @@ func (a *AllianceDataMessage) Marshal() []byte {
 	stream.Write(core.DataRef{8, alliance.BadgeId})
 
 	stream.Write(core.VInt(alliance.Type))
-	stream.Write(core.VInt(online))
+	stream.Write(core.VInt(alliance.TotalMembers))
 	stream.Write(core.VInt(alliance.TotalTrophies))
 	stream.Write(core.VInt(alliance.RequiredTrophies))
 
 	stream.Write(core.DataRef{0, 1})
 
 	stream.Write(alliance.Description)
+	
 	stream.Write(core.VInt(alliance.TotalMembers))
 
 	for _, member := range alliance.Members {
-		stream.Write(0)
+		stream.Write(member.HighId)
 		stream.Write(member.LowId)
 
 		stream.Write(member.Name)

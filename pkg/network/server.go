@@ -5,6 +5,7 @@ import (
 	"github.com/szcvak/sps/pkg/core"
 	"github.com/szcvak/sps/pkg/database"
 	"github.com/szcvak/sps/pkg/hub"
+	"github.com/szcvak/sps/pkg/messages"
 	"io"
 	"log/slog"
 	"net"
@@ -78,8 +79,34 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 		slog.Info("client disconnected", "total", s.totalClients.Load())
 
 		hub.GetHub().RemoveClient(wrapper)
-
+		
+		if wrapper.Player.TeamId != nil {
+			tm := core.GetTeamManager()
+			tm.SetStatus(wrapper.Player, 0)
+			
+			team := tm.Teams[*wrapper.Player.TeamId]
+			
+			for _, member := range team.Members {
+				if member.Wrapper == wrapper {
+					continue
+				}
+				
+				msg := messages.NewTeamMessage(member.Wrapper)
+				member.Wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
+			}
+		}
+		
+		for i, d := range messages.LoggedInUsers {
+			if d.Wrapper == wrapper {
+				messages.LoggedInUsers = remove(messages.LoggedInUsers, i)
+				break
+			}
+		}
+		
+		wrapper.Player = nil
 		wrapper.Close()
+		
+		wrapper = nil
 	}()
 
 	conn := wrapper.Conn()
@@ -129,4 +156,11 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 func (s *Server) Close() {
 	close(s.quitch)
 	s.closed = true
+}
+
+// --- Helper functions --- //
+
+func remove[T any](s []T, i int) []T {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
 }

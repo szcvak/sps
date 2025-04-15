@@ -11,6 +11,15 @@ import (
 	"github.com/szcvak/sps/pkg/messaging"
 )
 
+var (
+	LoggedInUsers = []struct {
+		HighId int32
+		LowId int32
+		Token string
+		Wrapper *core.ClientWrapper
+	}{}
+)
+
 type LoginMessage struct {
 	HighId int32
 	LowId  int32
@@ -70,6 +79,21 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 	if !l.Unmarshalled() {
 		return
 	}
+	
+	duplicate := false
+	
+	for _, x := range LoggedInUsers {
+		if l.Token == x.Token || (l.HighId == x.HighId && l.LowId == x.LowId) {
+			duplicate = true
+			break
+		}
+	}
+	
+	if duplicate {
+		failMsg := NewLoginFailedMessage(l, "You are already logged in somewhere else.", messaging.LoginFailed)
+		wrapper.Send(failMsg.PacketId(), failMsg.PacketVersion(), failMsg.Marshal())
+		return
+	}
 
 	player, err := dbm.LoadPlayerByToken(context.Background(), l.Token)
 	isNew := false
@@ -98,6 +122,18 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 			return
 		}
 	}
+	
+	LoggedInUsers = append(LoggedInUsers, struct {
+		HighId int32
+		LowId int32
+		Token string
+		Wrapper *core.ClientWrapper
+	}{
+		HighId: l.HighId,
+		LowId: l.LowId,
+		Token: l.Token,
+		Wrapper: wrapper,
+	})
 
 	if !isNew {
 		stmt := `update players set last_login = current_timestamp where id = $1`
@@ -126,4 +162,14 @@ func (l *LoginMessage) Process(wrapper *core.ClientWrapper, dbm *database.Manage
 
 	msg4 := NewMyAllianceMessage(wrapper, dbm)
 	wrapper.Send(msg4.PacketId(), msg4.PacketVersion(), msg4.Marshal())
+	
+	if wrapper.Player.TeamId != nil {
+		tm := core.GetTeamManager()
+		
+		tm.AssignWrapper(wrapper)
+		tm.SetStatus(wrapper.Player, 3)
+		
+		msg5 := NewTeamMessage(wrapper)
+		wrapper.Send(msg5.PacketId(), msg5.PacketVersion(), msg5.Marshal())
+	}
 }

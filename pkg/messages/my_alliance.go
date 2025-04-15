@@ -63,7 +63,7 @@ func (m *MyAllianceMessage) Marshal() []byte {
 	stream.Write(a.Name)
 	stream.Write(core.DataRef{8, a.BadgeId})
 	stream.Write(core.VInt(a.Type))
-	stream.Write(core.VInt(online))
+	stream.Write(core.VInt(a.TotalMembers))
 	stream.Write(core.VInt(a.TotalTrophies))
 	stream.Write(core.DataRef{0, 1})
 	stream.Write(core.VInt(a.TotalMembers))

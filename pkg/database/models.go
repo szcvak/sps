@@ -160,29 +160,6 @@ const (
 
     created_at timestamptz not null default current_timestamp
 );`
-
-	teams = `create table if not exists teams (
-    id bigserial primary key,
-    code text unique,
-    
-    is_practice boolean not null default false,
-    total_members int not null default 1,
-    
-    created_at timestamptz not null default current_timestamp
-);`
-
-	teamMembers = `create table if not exists team_members (
-    team_code text references teams (code) on delete cascade,
-    player_id bigint references players (id) on delete cascade,
-
-    is_creator boolean not null default false,
-    status smallint not null default 0,
-    is_ready boolean not null default false,
-    
-    joined_at timestamptz not null default current_timestamp,
-
-    primary key (team_code, player_id)
-);`
 )
 
 // --- Errors --- //

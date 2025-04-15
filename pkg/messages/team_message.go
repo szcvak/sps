@@ -1,24 +1,18 @@
 package messages
 
 import (
-	"context"
 	"github.com/szcvak/sps/pkg/config"
 	"github.com/szcvak/sps/pkg/core"
-	"github.com/szcvak/sps/pkg/database"
 	"log/slog"
 )
 
 type TeamMessage struct {
 	wrapper *core.ClientWrapper
-	dbm     *database.Manager
-	event   int32
 }
 
-func NewTeamMessage(wrapper *core.ClientWrapper, dbm *database.Manager, event int32) *TeamMessage {
+func NewTeamMessage(wrapper *core.ClientWrapper) *TeamMessage {
 	return &TeamMessage{
 		wrapper: wrapper,
-		dbm:     dbm,
-		event:   event,
 	}
 }
 
@@ -33,14 +27,25 @@ func (t *TeamMessage) PacketVersion() uint16 {
 func (t *TeamMessage) Marshal() []byte {
 	stream := core.NewByteStreamWithCapacity(64)
 
-	if t.wrapper.Player.TeamCode == nil {
+	if t.wrapper == nil {
+		return []byte{}
+	}
+	
+	if t.wrapper.Player == nil {
+		return []byte{}
+	}
+	
+	if t.wrapper.Player.TeamId == nil {
+		slog.Error("failed to send team message!", "playerId", t.wrapper.Player.DbId, "err", "player is not in team")
 		return []byte{}
 	}
 
-	team, err := t.dbm.LoadTeam(context.Background(), *t.wrapper.Player.TeamCode)
+	tm := core.GetTeamManager()
+	team := tm.Teams[*t.wrapper.Player.TeamId]
 
-	if err != nil {
-		slog.Error("failed to load team!", "err", err)
+	if team == nil {
+		slog.Error("team does not exist!", "teamId", *t.wrapper.Player.TeamId)
+		t.wrapper.Player.TeamId = nil
 		return []byte{}
 	}
 
@@ -53,14 +58,16 @@ func (t *TeamMessage) Marshal() []byte {
 	}
 
 	em := core.GetEventManager()
-	location := em.GetCurrentEvent(t.event).LocationId
+	event := em.GetCurrentEvent(team.Event-1)
+	location := event.LocationId
+	maxPlayers := event.Config.MaxPlayers
 
-	stream.Write(core.VInt(0))    // game room type
-	stream.Write(team.IsPractice) // practice with bots
-	stream.Write(core.VInt(3))    // max players
+	stream.Write(core.VInt(0))           // game room type
+	stream.Write(team.IsPractice)        // practice with bots
+	stream.Write(core.VInt(maxPlayers))  // max players
 
 	stream.Write(0)
-	stream.Write(int32(team.DbId)) // team id
+	stream.Write(int32(team.Id)) // team id
 
 	stream.Write(core.VInt(0))
 	stream.Write(core.VInt(0))
@@ -68,29 +75,22 @@ func (t *TeamMessage) Marshal() []byte {
 
 	stream.Write(core.ScId{15, location})
 
-	stream.Write(core.VInt(team.TotalMembers))
+	stream.Write(core.VInt(len(team.Members)))
 
 	for i, member := range team.Members {
-		if i == 0 {
-			stream.Write(0)
-			stream.Write(t.wrapper.Player.LowId)
-		} else {
-			stream.Write(1)
-			stream.Write(int32(i))
-		}
-
-		selectedSkin := member.Brawlers[member.SelectedCardLow].SelectedSkinId
+		stream.Write(member.HighId)
+		stream.Write(member.LowId)
 
 		stream.Write(member.Name)
 		stream.Write(core.VInt(0))
-		stream.Write(core.ScId{member.SelectedCardHigh, member.SelectedCardLow})
-		stream.Write(core.ScId{29, selectedSkin})
+		stream.Write(member.SelectedBrawler)
+		stream.Write(member.SelectedSkin)
 		stream.Write(core.VInt(brawlerTrophies))
 		stream.Write(core.VInt(brawlerTrophies))
 		stream.Write(core.VInt(config.MaximumRank))
-		stream.Write(core.VInt(member.TeamStatus))
+		stream.Write(core.VInt(member.Status)) // 0=offline, 1=in battle, 2=other screen, 3=present, 4=in matchmake
 		stream.Write(core.VInt(0))
-		stream.Write(member.TeamIsReady)
+		stream.Write(member.IsReady)
 		stream.Write(core.VInt(i))
 	}
 
