@@ -29,7 +29,7 @@ func (a *AllianceChatServerMessage) PacketVersion() uint16 {
 func (a *AllianceChatServerMessage) Marshal() []byte {
 	stream := core.NewByteStreamWithCapacity(64)
 
-	if a.msg.Type == 43 || a.msg.Type == 44 {
+	if a.msg.Type > 40 && a.msg.Type < 50 {
 		stream.Write(core.VInt(4))
 	} else {
 		stream.Write(core.VInt(a.msg.Type))
@@ -46,10 +46,16 @@ func dispatchEntry(stream *core.ByteStream, msg core.AllianceMessage) {
 	switch msg.Type {
 	case 2:
 		chatStreamEntry(stream, msg)
+	case 41:
+		allianceEventStreamEntry(stream, msg, 1)
 	case 43:
 		allianceEventStreamEntry(stream, msg, 3)
 	case 44:
 		allianceEventStreamEntry(stream, msg, 4)
+	case 45:
+		allianceEventStreamEntry(stream, msg, 5)
+	case 46:
+		allianceEventStreamEntry(stream, msg, 6)
 	}
 }
 
@@ -90,5 +96,5 @@ func allianceEventStreamEntry(stream *core.ByteStream, msg core.AllianceMessage,
 	stream.Write(core.VInt(event))
 	stream.Write(true)
 	stream.Write(core.LogicLong{0, int32(*msg.TargetId)})
-	stream.Write(msg.PlayerName)
+	stream.Write(msg.TargetName)
 }

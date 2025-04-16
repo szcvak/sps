@@ -31,6 +31,11 @@ func (o *OwnHomeDataMessage) PacketVersion() uint16 {
 }
 
 func (o *OwnHomeDataMessage) Marshal() []byte {
+	defer func() {
+		info := NewLobbyInfoMessage(3)
+		o.wrapper.Send(info.PacketId(), info.PacketVersion(), info.Marshal())
+	}()
+	
 	player := o.wrapper.Player
 
 	player.SetState(core.StateLoggedIn)

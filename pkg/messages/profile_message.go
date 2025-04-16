@@ -68,7 +68,7 @@ func (p *ProfileMessage) Marshal() []byte {
 
 	// stats
 
-	stream.Write(core.VInt(7)) // stats count
+	stream.Write(core.VInt(7))
 
 	stream.Write(core.VInt(1)) // stats index
 	stream.Write(core.VInt(p.player.TrioVictories))
@@ -90,28 +90,6 @@ func (p *ProfileMessage) Marshal() []byte {
 
 	stream.Write(core.VInt(8))
 	stream.Write(core.VInt(p.player.SoloVictories))
-
-	// second pass
-
-	stream.Write(core.VInt(2))
-	stream.Write(core.VInt(p.player.Experience))
-
-	stream.Write(core.VInt(3))
-	stream.Write(core.VInt(p.player.Trophies))
-
-	stream.Write(core.VInt(4))
-	stream.Write(core.VInt(p.player.HighestTrophies))
-
-	stream.Write(core.VInt(5))
-	stream.Write(core.VInt(len(p.player.Brawlers)))
-
-	stream.Write(core.VInt(7))
-	stream.Write(core.VInt(28000000 + p.player.ProfileIcon))
-
-	stream.Write(core.VInt(8))
-	stream.Write(core.VInt(p.player.SoloVictories))
-
-	// end
 
 	// alliance
 
@@ -140,7 +118,7 @@ func (p *ProfileMessage) Marshal() []byte {
 		stream.Write(core.VInt(a.RequiredTrophies))
 
 		stream.Write(core.ScId{14, 249}) // unknown
-		stream.Write(core.ScId{25, 2})   // unknown
+		stream.Write(core.VInt(25))      // unknown
 
 		stream.Write(core.VInt(p.player.AllianceRole))
 	}

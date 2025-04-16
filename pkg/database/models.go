@@ -18,7 +18,7 @@ const (
     token text unique not null,
     region text not null,
 
-	battle_hints boolean not null default false,
+	battle_hints boolean not null default true,
 	control_mode smallint not null default 0,
 	tutorial_state int not null default 0,
 

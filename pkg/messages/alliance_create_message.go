@@ -46,7 +46,7 @@ func (a *AllianceCreateMessage) Process(wrapper *core.ClientWrapper, dbm *databa
 	h := hub.GetHub()
 	h.UpdateAllianceMembership(wrapper, nil, wrapper.Player.AllianceId)
 
-	msg := NewAllianceEventMessage(20)
+	msg := NewAllianceResponseMessage(20)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 
 	msg2 := NewMyAllianceMessage(wrapper, dbm)

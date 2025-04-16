@@ -19,7 +19,7 @@ type Server struct {
 
 	dbm *database.Manager
 
-	totalClients atomic.Int64
+	totalClients atomic.Int32
 
 	closed bool
 }
@@ -108,7 +108,7 @@ func (s *Server) handleClient(wrapper *core.ClientWrapper) {
 		
 		wrapper = nil
 	}()
-
+	
 	conn := wrapper.Conn()
 	header := make([]byte, 7)
 

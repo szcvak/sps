@@ -34,7 +34,7 @@ func (a *AllianceLeaveMessage) Process(wrapper *core.ClientWrapper, dbm *databas
 	h := hub.GetHub()
 	h.UpdateAllianceMembership(wrapper, wrapper.Player.AllianceId, nil)
 
-	msg := NewAllianceEventMessage(80)
+	msg := NewAllianceResponseMessage(80)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 
 	msg2 := NewMyAllianceMessage(wrapper, dbm)

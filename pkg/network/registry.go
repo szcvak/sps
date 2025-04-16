@@ -39,4 +39,6 @@ func init() {
 	registerClientMessage(14357, func() messaging.ClientMessage { return messages.NewTeamToggleMemberSideMessage() })
 	registerClientMessage(14359, func() messaging.ClientMessage { return messages.NewTeamChatMessage() })
 	registerClientMessage(14360, func() messaging.ClientMessage { return messages.NewTeamPostAdMessage() })
+	registerClientMessage(14306, func() messaging.ClientMessage { return messages.NewAlliancePromoteMessage() })
+	registerClientMessage(14307, func() messaging.ClientMessage { return messages.NewAllianceKickMessage() })
 }

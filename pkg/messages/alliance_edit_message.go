@@ -47,7 +47,7 @@ func (a *AllianceEditMessage) Process(wrapper *core.ClientWrapper, dbm *database
 		return
 	}
 
-	msg := NewAllianceEventMessage(10)
+	msg := NewAllianceResponseMessage(10)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 
 	msg2 := NewMyAllianceMessage(wrapper, dbm)

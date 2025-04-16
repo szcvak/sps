@@ -46,8 +46,8 @@ func (a *AllianceJoinMessage) Process(wrapper *core.ClientWrapper, dbm *database
 		slog.Error("failed to send alliance message!", "err", err)
 		return
 	}
-
-	msg := NewAllianceEventMessage(40)
+	
+	msg := NewAllianceResponseMessage(40)
 	wrapper.Send(msg.PacketId(), msg.PacketVersion(), msg.Marshal())
 
 	msg2 := NewMyAllianceMessage(wrapper, dbm)
